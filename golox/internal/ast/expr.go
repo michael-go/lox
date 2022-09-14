@@ -3,48 +3,48 @@ package ast
 
 import "github.com/michael-go/lox/golox/internal/token"
 
-type Expr[R any] interface {
-	Accept(visitor Visitor[R]) R
+type Expr interface {
+	Accept(visitor Visitor) any
 }
 
-type Binary[R any] struct {
-	Left     Expr[R]
+type Binary struct {
+	Left     Expr
 	Operator token.Token
-	Right    Expr[R]
+	Right    Expr
 }
 
-type Grouping[R any] struct {
-	Expression Expr[R]
+type Grouping struct {
+	Expression Expr
 }
 
-type Literal[R any] struct {
+type Literal struct {
 	Value any
 }
 
-type Unary[R any] struct {
+type Unary struct {
 	Operator token.Token
-	Right    Expr[R]
+	Right    Expr
 }
 
-type Visitor[R any] interface {
-	VisitBinaryExpr(expr Binary[R]) R
-	VisitGroupingExpr(expr Grouping[R]) R
-	VisitLiteralExpr(expr Literal[R]) R
-	VisitUnaryExpr(expr Unary[R]) R
+type Visitor interface {
+	VisitBinaryExpr(expr Binary) any
+	VisitGroupingExpr(expr Grouping) any
+	VisitLiteralExpr(expr Literal) any
+	VisitUnaryExpr(expr Unary) any
 }
 
-func (expr Binary[R]) Accept(visitor Visitor[R]) R {
+func (expr Binary) Accept(visitor Visitor) any {
 	return visitor.VisitBinaryExpr(expr)
 }
 
-func (expr Grouping[R]) Accept(visitor Visitor[R]) R {
+func (expr Grouping) Accept(visitor Visitor) any {
 	return visitor.VisitGroupingExpr(expr)
 }
 
-func (expr Literal[R]) Accept(visitor Visitor[R]) R {
+func (expr Literal) Accept(visitor Visitor) any {
 	return visitor.VisitLiteralExpr(expr)
 }
 
-func (expr Unary[R]) Accept(visitor Visitor[R]) R {
+func (expr Unary) Accept(visitor Visitor) any {
 	return visitor.VisitUnaryExpr(expr)
 }

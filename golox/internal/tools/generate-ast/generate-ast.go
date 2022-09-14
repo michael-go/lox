@@ -21,26 +21,26 @@ package ast
 
 import "github.com/michael-go/lox/golox/internal/token"
 
-type {{.BaseName -}}[R any] interface {
-	Accept(visitor Visitor[R]) R
+type {{.BaseName}} interface {
+	Accept(visitor Visitor) any
 }
 
 {{range $name, $fields := .Classes}}
-type {{$name}}[R any] struct {
+type {{$name}} struct {
 	{{- range $field := $fields}}
 	{{$field -}}
 	{{end}}
 }
 {{end}}
 
-type Visitor[R any] interface {
+type Visitor interface {
 	{{range $name, $fields := .Classes -}}
-	Visit{{$name}}{{$.BaseName}}({{$.BaseName | ToLower}} {{$name}}[R]) R
+	Visit{{$name}}{{$.BaseName}}({{$.BaseName | ToLower}} {{$name}}) any
 	{{end}}
 }
 
 {{range $name, $fields := .Classes}}
-func ({{$.BaseName | ToLower}} {{$name}}[R]) Accept(visitor Visitor[R]) R {
+func ({{$.BaseName | ToLower}} {{$name}}) Accept(visitor Visitor) any {
 	return visitor.Visit{{$name}}{{$.BaseName}}({{$.BaseName | ToLower}})
 }
 {{end}}
@@ -105,9 +105,9 @@ func main() {
 	outputDir := os.Args[1]
 
 	defineAst(outputDir, "Expr", []string{
-		"Binary   : Left Expr[R], Operator token.Token, Right Expr[R]",
-		"Grouping : Expression Expr[R]",
+		"Binary   : Left Expr, Operator token.Token, Right Expr",
+		"Grouping : Expression Expr",
 		"Literal  : Value any",
-		"Unary    : Operator token.Token, Right Expr[R]",
+		"Unary    : Operator token.Token, Right Expr",
 	})
 }

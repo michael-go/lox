@@ -11,15 +11,15 @@ func main() {
 
 	astPrinter := ast.AstPrinter{}
 
-	expr := ast.Binary[string]{
-		Left: ast.Unary[string]{
+	expr := ast.Binary{
+		Left: ast.Unary{
 			Operator: token.Token{
 				Type:    token.MINUS,
 				Lexeme:  "-",
 				Literal: nil,
 				Line:    1,
 			},
-			Right: ast.Literal[string]{
+			Right: ast.Literal{
 				Value: 123,
 			},
 		},
@@ -29,8 +29,8 @@ func main() {
 			Literal: nil,
 			Line:    1,
 		},
-		Right: ast.Grouping[string]{
-			Expression: ast.Literal[string]{
+		Right: ast.Grouping{
+			Expression: ast.Literal{
 				Value: 45.67,
 			},
 		},
