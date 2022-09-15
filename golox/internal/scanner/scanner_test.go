@@ -34,8 +34,9 @@ func TestNumbers(t *testing.T) {
 		{Type: token.RIGHT_PAREN, Lexeme: ")", Line: 1},
 		{Type: token.STAR, Lexeme: "*", Line: 1},
 		{Type: token.MINUS, Lexeme: "-", Line: 1},
-		{Type: token.NUMBER, Lexeme: "7", Literal: 7.0, Line: 1}},
-		tokens)
+		{Type: token.NUMBER, Lexeme: "7", Literal: 7.0, Line: 1},
+		{Type: token.EOF, Line: 1},
+	}, tokens)
 }
 
 func TestMultiline(t *testing.T) {
@@ -74,6 +75,7 @@ RIGHT_PAREN ) <nil>
 PRINT print <nil>
 IDENTIFIER i <nil>
 RIGHT_BRACE } <nil>
+EOF  <nil>
 `,
 		tokensStr)
 }
@@ -83,5 +85,8 @@ func TestErrors(t *testing.T) {
 	tokens, err := scanner.ScanTokens()
 	assert.Nil(t, err)
 	assert.True(t, globals.HadError)
-	assert.Equal(t, []token.Token{{Type: token.IDENTIFIER, Lexeme: "x", Line: 1}}, tokens)
+	assert.Equal(t, []token.Token{
+		{Type: token.IDENTIFIER, Lexeme: "x", Line: 1},
+		{Type: token.EOF, Line: 1},
+	}, tokens)
 }

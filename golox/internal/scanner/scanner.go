@@ -29,6 +29,9 @@ func (s *Scanner) ScanTokens() ([]token.Token, error) {
 		s.scanToken()
 	}
 
+	s.start = s.current
+	s.addToken(token.EOF)
+
 	return s.tokens, nil
 }
 

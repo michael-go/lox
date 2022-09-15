@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/michael-go/lox/golox/internal/ast"
+	"github.com/michael-go/lox/golox/internal/parser"
 	"github.com/michael-go/lox/golox/internal/scanner"
 )
 
@@ -17,9 +19,9 @@ func run(source string) error {
 		return fmt.Errorf("faied to scan tokens: %w", err)
 	}
 
-	for _, token := range tokens {
-		fmt.Println(token)
-	}
+	parser := parser.New(tokens)
+	expr := parser.Parse()
+	fmt.Println(ast.AstPrinter{}.Print(expr))
 
 	return nil
 }
