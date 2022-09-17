@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/michael-go/lox/golox/internal/ast"
+	"github.com/michael-go/lox/golox/internal/globals"
 	"github.com/michael-go/lox/golox/internal/scanner"
 	"github.com/stretchr/testify/assert"
 )
@@ -46,4 +47,26 @@ func TestParsingError(t *testing.T) {
 	expr, err := codeToAstString(code)
 	assert.Nil(t, err)
 	assert.Equal(t, "", expr)
+	assert.True(t, globals.HadError)
+}
+
+func TestMissingCloseParenError(t *testing.T) {
+	origReportError := globals.ReportError
+	defer func() {
+		globals.ReportError = origReportError
+	}()
+
+	errorReported := false
+	globals.ReportError = func(line int, where string, message string) {
+		assert.Equal(t, 1, line)
+		assert.Equal(t, " at end", where)
+		assert.Equal(t, "Expect ')' after expression.", message)
+		errorReported = true
+	}
+
+	code := `1 + (2 * 3`
+	expr, err := codeToAstString(code)
+	assert.Nil(t, err)
+	assert.Equal(t, "", expr)
+	assert.True(t, errorReported)
 }
