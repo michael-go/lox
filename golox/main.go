@@ -7,7 +7,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/michael-go/lox/golox/internal/ast"
+	"github.com/michael-go/lox/golox/internal/globals"
+	"github.com/michael-go/lox/golox/internal/interpreter"
 	"github.com/michael-go/lox/golox/internal/parser"
 	"github.com/michael-go/lox/golox/internal/scanner"
 )
@@ -21,7 +22,13 @@ func run(source string) error {
 
 	parser := parser.New(tokens)
 	expr := parser.Parse()
-	fmt.Println(ast.AstPrinter{}.Print(expr))
+	if globals.HadError {
+		return nil
+	}
+
+	interpreter := interpreter.New()
+	result := interpreter.Interpret(expr)
+	fmt.Println(result)
 
 	return nil
 }
@@ -64,6 +71,11 @@ func main() {
 		fmt.Println("Usage: golox [script]")
 	} else if len(os.Args) == 2 {
 		err = runFile(os.Args[1])
+		if globals.HadError {
+			os.Exit(65)
+		} else if globals.HadRuntimeError {
+			os.Exit(70)
+		}
 	} else {
 		err = runPrompt()
 	}
