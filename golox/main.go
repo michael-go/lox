@@ -63,8 +63,6 @@ func runPrompt() error {
 }
 
 func main() {
-	fmt.Println(os.Args)
-
 	var err error
 
 	if len(os.Args) > 2 {
