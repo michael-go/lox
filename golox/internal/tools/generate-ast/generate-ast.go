@@ -21,8 +21,10 @@ package ast
 
 import "github.com/michael-go/lox/golox/internal/token"
 
+var _ = token.Token{} // to avoid unused import error
+
 type {{.BaseName}} interface {
-	Accept(visitor Visitor) any
+	Accept(visitor {{.BaseName}}Visitor) any
 }
 
 {{range $name, $fields := .Classes}}
@@ -33,14 +35,14 @@ type {{$name}} struct {
 }
 {{end}}
 
-type Visitor interface {
+type {{.BaseName}}Visitor interface {
 	{{range $name, $fields := .Classes -}}
 	Visit{{$name}}{{$.BaseName}}({{$.BaseName | ToLower}} {{$name}}) any
 	{{end}}
 }
 
 {{range $name, $fields := .Classes}}
-func ({{$.BaseName | ToLower}} {{$name}}) Accept(visitor Visitor) any {
+func ({{$.BaseName | ToLower}} {{$name}}) Accept(visitor {{$.BaseName}}Visitor) any {
 	return visitor.Visit{{$name}}{{$.BaseName}}({{$.BaseName | ToLower}})
 }
 {{end}}
@@ -105,9 +107,18 @@ func main() {
 	outputDir := os.Args[1]
 
 	defineAst(outputDir, "Expr", []string{
+		"Assign   : Name token.Token, Value Expr",
 		"Binary   : Left Expr, Operator token.Token, Right Expr",
 		"Grouping : Expression Expr",
 		"Literal  : Value any",
 		"Unary    : Operator token.Token, Right Expr",
+		"Variable : Name token.Token",
+	})
+
+	defineAst(outputDir, "Stmt", []string{
+		"Block      : Statements []Stmt",
+		"Expression : Expression Expr",
+		"Print      : Expression Expr",
+		"Var 	    : Name token.Token, Initializer Expr",
 	})
 }

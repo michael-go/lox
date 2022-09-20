@@ -18,44 +18,49 @@ func interpret(t *testing.T, code string) string {
 	}
 
 	parser := parser.New(tokens)
-	expr := parser.Parse()
-	if expr == nil {
-		t.Fatalf("failed to parse %v", err)
+	statements := parser.Parse()
+	if statements == nil {
+		t.Fatalf("failed to parse")
 		return ""
 	}
 
 	interpreter := New()
-	return interpreter.Interpret(expr)
+	var result string
+	interpreter.Print = func(str string) {
+		result = result + str
+	}
+	interpreter.Interpret(statements)
+	return result
 }
 
 func TestCalc(t *testing.T) {
-	result := interpret(t, `1 + 2 * 3`)
-	assert.Equal(t, "7", result)
+	result := interpret(t, `print 1 + 2 * 3;`)
+	assert.Equal(t, "7\n", result)
 
-	result = interpret(t, `(1 + 2) * 3`)
-	assert.Equal(t, "9", result)
+	result = interpret(t, `print (1 + 2) * 3;`)
+	assert.Equal(t, "9\n", result)
 
-	result = interpret(t, `1 + 2 * 3 - 4 / 5`)
-	assert.Equal(t, "6.2", result)
+	result = interpret(t, `print 1 + 2 * 3 - 4 / 5;`)
+	assert.Equal(t, "6.2\n", result)
 }
 
 func TestComp(t *testing.T) {
-	assert.Equal(t, "true", interpret(t, `1 < 2`))
+	assert.Equal(t, "true\n", interpret(t, `print 1 < 2;`))
 
-	assert.Equal(t, "false", interpret(t, `2 < 2`))
+	assert.Equal(t, "false\n", interpret(t, `print 2 < 2;`))
 
-	assert.Equal(t, "true", interpret(t, `2 <= 2`))
+	assert.Equal(t, "true\n", interpret(t, `print 2 <= 2;`))
 
-	assert.Equal(t, "true", interpret(t, `"foo" == "fo" + "o"`))
+	assert.Equal(t, "true\n", interpret(t, `print "foo" == "fo" + "o";`))
 
-	assert.Equal(t, "false", interpret(t, `"foo" == "bar"`))
+	assert.Equal(t, "false\n", interpret(t, `print "foo" == "bar";`))
 
-	assert.Equal(t, "true", interpret(t, `7 == (3 + 4)`))
+	assert.Equal(t, "true\n", interpret(t, `print 7 == (3 + 4);`))
 
 	// TODO: ensure that this is correct
-	assert.Equal(t, "false", interpret(t, `true == 7 == 7`))
+	assert.Equal(t, "false\n", interpret(t, `print true == 7 == 7;`))
 
-	assert.Equal(t, "true", interpret(t, `true == (7 == 7)`))
+	assert.Equal(t, "true\n", interpret(t, `print true == (7 == 7);`))
 }
 
 func TestRuntimeError(t *testing.T) {
@@ -64,7 +69,7 @@ func TestRuntimeError(t *testing.T) {
 	}()
 	globals.HadRuntimeError = false
 
-	result := interpret(t, `-"foo"`)
+	result := interpret(t, `-"foo";`)
 	assert.Equal(t, "", result)
 	assert.True(t, globals.HadRuntimeError)
 }
@@ -81,6 +86,6 @@ func TestRuntimeErrorMessage(t *testing.T) {
 		assert.Equal(t, "Operands must be two numbers or two strings.", err.Message)
 	}
 
-	interpret(t, `1 + "foo"`)
+	interpret(t, `print 1 + "foo";`)
 	assert.True(t, errorReported)
 }

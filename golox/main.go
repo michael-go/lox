@@ -21,15 +21,13 @@ func run(source string) error {
 	}
 
 	parser := parser.New(tokens)
-	expr := parser.Parse()
+	statements := parser.Parse()
 	if globals.HadError {
-		return nil
+		return fmt.Errorf("failed to parse")
 	}
 
 	interpreter := interpreter.New()
-	result := interpreter.Interpret(expr)
-	fmt.Println(result)
-
+	interpreter.Interpret(statements)
 	return nil
 }
 
@@ -39,7 +37,9 @@ func runFile(path string) error {
 		return fmt.Errorf("could not read file: %w", err)
 	}
 
-	return run(string(content))
+	run(string(content))
+
+	return nil
 }
 
 func runPrompt() error {

@@ -9,13 +9,22 @@ import (
 )
 
 type Interpreter struct {
+	environment *Environment
+
+	// declare like this to be able to mock it in tests
+	Print func(str string)
 }
 
 func New() Interpreter {
-	return Interpreter{}
+	return Interpreter{
+		environment: NewEnvironment(nil),
+		Print: func(str string) {
+			fmt.Print(str)
+		},
+	}
 }
 
-func (i *Interpreter) Interpret(expr ast.Expr) string {
+func (i *Interpreter) Interpret(statements []ast.Stmt) string {
 	defer func() {
 		if r := recover(); r != nil {
 			if err, ok := r.(globals.RuntimeError); ok {
@@ -26,8 +35,15 @@ func (i *Interpreter) Interpret(expr ast.Expr) string {
 		}
 	}()
 
-	value := i.evaluate(expr)
+	var value any
+	for _, statement := range statements {
+		value = i.execute(statement)
+	}
 	return stringify(value)
+}
+
+func (i *Interpreter) execute(stmt ast.Stmt) any {
+	return stmt.Accept(i)
 }
 
 func stringify(obj any) string {
@@ -146,4 +162,50 @@ func checkNumberOperands(operator token.Token, left any, right any) {
 		return
 	}
 	panic(globals.RuntimeError{Token: operator, Message: "Operands must be numbers."})
+}
+
+func (i *Interpreter) VisitExpressionStmt(stmt ast.Expression) any {
+	i.evaluate(stmt.Expression)
+	return nil
+}
+
+func (i *Interpreter) VisitPrintStmt(stmt ast.Print) any {
+	value := i.evaluate(stmt.Expression)
+	i.Print(fmt.Sprintln(stringify(value)))
+	return nil
+}
+
+func (i *Interpreter) VisitVarStmt(stmt ast.Var) any {
+	var value any
+	if stmt.Initializer != nil {
+		value = i.evaluate(stmt.Initializer)
+	}
+
+	i.environment.Define(stmt.Name.Lexeme, value)
+	return nil
+}
+
+func (i *Interpreter) VisitVariableExpr(expr ast.Variable) any {
+	return i.environment.Get(expr.Name)
+}
+
+func (i *Interpreter) VisitAssignExpr(expr ast.Assign) any {
+	value := i.evaluate(expr.Value)
+	i.environment.Assign(expr.Name, value)
+	return value
+}
+
+func (i *Interpreter) VisitBlockStmt(stmt ast.Block) any {
+	i.executeBlock(stmt.Statements, NewEnvironment(i.environment))
+	return nil
+}
+
+func (i *Interpreter) executeBlock(statements []ast.Stmt, env *Environment) {
+	previous := i.environment
+	defer func() { i.environment = previous }()
+	i.environment = env
+
+	for _, statement := range statements {
+		i.execute(statement)
+	}
 }

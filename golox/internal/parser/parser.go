@@ -19,22 +19,101 @@ func New(tokens []token.Token) Parser {
 	return Parser{tokens: tokens}
 }
 
-func (p *Parser) Parse() ast.Expr {
+func (p *Parser) Parse() []ast.Stmt {
+	var statements []ast.Stmt
+	for !p.isAtEnd() {
+		statements = append(statements, p.decleration())
+	}
+
+	return statements
+}
+
+func (p *Parser) decleration() ast.Stmt {
 	recorver := func() {
 		if r := recover(); r != nil {
 			_, ok := r.(ParserError)
 			if !ok {
 				panic(r)
 			}
+			p.synchronize()
+			// TODO: it can return null, so need to make sure interprerter can handle it
 		}
 	}
 	defer recorver()
 
-	return p.expression()
+	if p.match(token.VAR) {
+		return p.varDecleration()
+	}
+
+	return p.statement()
+}
+
+func (p *Parser) varDecleration() ast.Stmt {
+	name := p.consume(token.IDENTIFIER, "Expect variable name.")
+
+	var initializer ast.Expr
+	if p.match(token.EQUAL) {
+		initializer = p.expression()
+	}
+
+	p.consume(token.SEMICOLON, "Expect ';' after variable declaration.")
+	return ast.Var{Name: name, Initializer: initializer}
+}
+
+func (p *Parser) statement() ast.Stmt {
+	if p.match(token.PRINT) {
+		return p.printStatement()
+	}
+
+	if p.match(token.LEFT_BRACE) {
+		return ast.Block{Statements: p.block()}
+	}
+
+	return p.expressionStatement()
+}
+
+func (p *Parser) block() []ast.Stmt {
+	var statements []ast.Stmt
+
+	for !p.check(token.RIGHT_BRACE) && !p.isAtEnd() {
+		statements = append(statements, p.decleration())
+	}
+
+	p.consume(token.RIGHT_BRACE, "Expect '}' after block.")
+	return statements
+}
+
+func (p *Parser) printStatement() ast.Stmt {
+	value := p.expression()
+	p.consume(token.SEMICOLON, "Expect ';' after value.")
+	return ast.Print{Expression: value}
+}
+
+func (p *Parser) expressionStatement() ast.Stmt {
+	expr := p.expression()
+	p.consume(token.SEMICOLON, "Expect ';' after expression.")
+	return ast.Expression{Expression: expr}
 }
 
 func (p *Parser) expression() ast.Expr {
-	return p.equality()
+	return p.assignment()
+}
+
+func (p *Parser) assignment() ast.Expr {
+	expr := p.equality()
+
+	if p.match(token.EQUAL) {
+		equals := p.previous()
+		value := p.assignment()
+
+		if name, ok := expr.(ast.Variable); ok {
+			return ast.Assign{Name: name.Name, Value: value}
+		}
+
+		p.panicError(equals, "Invalid assignment target.")
+	}
+
+	return expr
 }
 
 func (p *Parser) equality() ast.Expr {
@@ -108,6 +187,10 @@ func (p *Parser) primary() ast.Expr {
 
 	if p.match(token.NUMBER, token.STRING) {
 		return ast.Literal{Value: p.previous().Literal}
+	}
+
+	if p.match(token.IDENTIFIER) {
+		return ast.Variable{Name: p.previous()}
 	}
 
 	if p.match(token.LEFT_PAREN) {
