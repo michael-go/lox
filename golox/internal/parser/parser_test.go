@@ -46,7 +46,7 @@ func TestParsingError(t *testing.T) {
 	code := `$# foo;`
 	expr, err := codeToAstString(code)
 	assert.Nil(t, err)
-	assert.Equal(t, "", expr)
+	assert.Equal(t, "(; foo)", expr)
 	assert.True(t, globals.HadError)
 }
 

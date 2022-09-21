@@ -11,6 +11,9 @@ type AstPrinter struct {
 func (p AstPrinter) Print(statements []Stmt) string {
 	var result string
 	for _, statement := range statements {
+		if statement == nil {
+			continue
+		}
 		result += statement.Accept(p).(string)
 	}
 	return result
