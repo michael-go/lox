@@ -3,4 +3,13 @@ while (i < 5) {
     print i;
     i = i + 1;
 }
-print "done";
+print "done while";
+
+print "fibonacci:";
+var a = 0;
+var temp;
+for (var b = 1; a < 20; b = temp + b) {
+  print a;
+  temp = a;
+  a = b;
+}
