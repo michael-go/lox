@@ -85,3 +85,23 @@ func (p AstPrinter) VisitBlockStmt(stmt Block) any {
 
 	return builder.String()
 }
+
+func (p AstPrinter) VisitIfStmt(stmt If) any {
+	var builder strings.Builder
+
+	builder.WriteString("if ")
+	builder.WriteString(stmt.Condition.Accept(p).(string))
+	builder.WriteString(" ")
+	builder.WriteString(stmt.ThenBranch.Accept(p).(string))
+
+	if stmt.ElseBranch != nil {
+		builder.WriteString(" else ")
+		builder.WriteString(stmt.ElseBranch.Accept(p).(string))
+	}
+
+	return builder.String()
+}
+
+func (p AstPrinter) VisitLogicalExpr(expr Logical) any {
+	return p.parenthesize(expr.Operator.Lexeme, expr.Left, expr.Right)
+}

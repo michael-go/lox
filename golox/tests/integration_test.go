@@ -18,8 +18,11 @@ func parseExpected(expectedPath string) (int, string, error) {
 		return 0, "", fmt.Errorf("could not read expected output: %w", err)
 	}
 
-	r := regexp.MustCompile(`(?s)# exit code: (?P<ExitCode>\d+)\n# stdout:\n(?P<Stdout>.*)`)
+	r := regexp.MustCompile(`(?s)# exit code: (?P<ExitCode>\d+)\s*\n# stdout:\s*\n(?P<Stdout>.*)`)
 	match := r.FindStringSubmatch(string(expected))
+	if len(match) == 0 {
+		return 0, "", fmt.Errorf("failed to parse expected output")
+	}
 	exitCode, err := strconv.Atoi(match[1])
 	if err != nil {
 		return 0, "", fmt.Errorf("could not parse exit code: %w", err)
@@ -53,8 +56,8 @@ func TestIntegration(t *testing.T) {
 				if err != nil {
 					t.Fatalf("could not parse expected output: %v", err)
 				}
-				assert.Equal(t, expectedExitCode, cmd.ProcessState.ExitCode())
-				assert.Equal(t, expectedStdout, string(stdout))
+				assert.Equal(t, expectedExitCode, cmd.ProcessState.ExitCode(), "exit code")
+				assert.Equal(t, expectedStdout, string(stdout), "stdout")
 			})
 		}
 	}

@@ -209,3 +209,28 @@ func (i *Interpreter) executeBlock(statements []ast.Stmt, env *Environment) {
 		i.execute(statement)
 	}
 }
+
+func (i *Interpreter) VisitIfStmt(stmt ast.If) any {
+	if isTruthy(i.evaluate(stmt.Condition)) {
+		i.execute(stmt.ThenBranch)
+	} else if stmt.ElseBranch != nil {
+		i.execute(stmt.ElseBranch)
+	}
+	return nil
+}
+
+func (i *Interpreter) VisitLogicalExpr(expr ast.Logical) any {
+	left := i.evaluate(expr.Left)
+
+	if expr.Operator.Type == token.OR {
+		if isTruthy(left) {
+			return left
+		}
+	} else {
+		if !isTruthy(left) {
+			return left
+		}
+	}
+
+	return i.evaluate(expr.Right)
+}

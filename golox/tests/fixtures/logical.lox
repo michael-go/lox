@@ -1,0 +1,8 @@
+print "hi" or 2;
+print nil or "yes";
+
+if ("foo" == "fo" + "o") {
+    print "bar";
+} else {
+    print "baz";
+}

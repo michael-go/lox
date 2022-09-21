@@ -17,6 +17,12 @@ type Expression struct {
 	Expression Expr
 }
 
+type If struct {
+	Condition  Expr
+	ThenBranch Stmt
+	ElseBranch Stmt
+}
+
 type Print struct {
 	Expression Expr
 }
@@ -29,6 +35,7 @@ type Var struct {
 type StmtVisitor interface {
 	VisitBlockStmt(stmt Block) any
 	VisitExpressionStmt(stmt Expression) any
+	VisitIfStmt(stmt If) any
 	VisitPrintStmt(stmt Print) any
 	VisitVarStmt(stmt Var) any
 }
@@ -39,6 +46,10 @@ func (stmt Block) Accept(visitor StmtVisitor) any {
 
 func (stmt Expression) Accept(visitor StmtVisitor) any {
 	return visitor.VisitExpressionStmt(stmt)
+}
+
+func (stmt If) Accept(visitor StmtVisitor) any {
+	return visitor.VisitIfStmt(stmt)
 }
 
 func (stmt Print) Accept(visitor StmtVisitor) any {

@@ -111,6 +111,7 @@ func main() {
 		"Binary   : Left Expr, Operator token.Token, Right Expr",
 		"Grouping : Expression Expr",
 		"Literal  : Value any",
+		"Logical  : Left Expr, Operator token.Token, Right Expr",
 		"Unary    : Operator token.Token, Right Expr",
 		"Variable : Name token.Token",
 	})
@@ -118,6 +119,7 @@ func main() {
 	defineAst(outputDir, "Stmt", []string{
 		"Block      : Statements []Stmt",
 		"Expression : Expression Expr",
+		"If         : Condition Expr, ThenBranch Stmt, ElseBranch Stmt",
 		"Print      : Expression Expr",
 		"Var 	    : Name token.Token, Initializer Expr",
 	})
