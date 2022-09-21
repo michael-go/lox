@@ -32,12 +32,18 @@ type Var struct {
 	Initializer Expr
 }
 
+type While struct {
+	Condition Expr
+	Body      Stmt
+}
+
 type StmtVisitor interface {
 	VisitBlockStmt(stmt Block) any
 	VisitExpressionStmt(stmt Expression) any
 	VisitIfStmt(stmt If) any
 	VisitPrintStmt(stmt Print) any
 	VisitVarStmt(stmt Var) any
+	VisitWhileStmt(stmt While) any
 }
 
 func (stmt Block) Accept(visitor StmtVisitor) any {
@@ -58,4 +64,8 @@ func (stmt Print) Accept(visitor StmtVisitor) any {
 
 func (stmt Var) Accept(visitor StmtVisitor) any {
 	return visitor.VisitVarStmt(stmt)
+}
+
+func (stmt While) Accept(visitor StmtVisitor) any {
+	return visitor.VisitWhileStmt(stmt)
 }

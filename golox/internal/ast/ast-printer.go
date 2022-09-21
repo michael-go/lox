@@ -105,3 +105,14 @@ func (p AstPrinter) VisitIfStmt(stmt If) any {
 func (p AstPrinter) VisitLogicalExpr(expr Logical) any {
 	return p.parenthesize(expr.Operator.Lexeme, expr.Left, expr.Right)
 }
+
+func (p AstPrinter) VisitWhileStmt(stmt While) any {
+	var builder strings.Builder
+
+	builder.WriteString("while ")
+	builder.WriteString(stmt.Condition.Accept(p).(string))
+	builder.WriteString(" ")
+	builder.WriteString(stmt.Body.Accept(p).(string))
+
+	return builder.String()
+}

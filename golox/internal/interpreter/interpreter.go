@@ -234,3 +234,10 @@ func (i *Interpreter) VisitLogicalExpr(expr ast.Logical) any {
 
 	return i.evaluate(expr.Right)
 }
+
+func (i *Interpreter) VisitWhileStmt(stmt ast.While) any {
+	for isTruthy(i.evaluate(stmt.Condition)) {
+		i.execute(stmt.Body)
+	}
+	return nil
+}
