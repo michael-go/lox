@@ -13,7 +13,7 @@ import (
 	"github.com/michael-go/lox/golox/internal/scanner"
 )
 
-func run(source string) error {
+func run(interpreter *interpreter.Interpreter, source string) error {
 	scan := scanner.New(source)
 	tokens, err := scan.ScanTokens()
 	if err != nil {
@@ -26,7 +26,6 @@ func run(source string) error {
 		return fmt.Errorf("failed to parse")
 	}
 
-	interpreter := interpreter.New()
 	interpreter.Interpret(statements)
 	return nil
 }
@@ -37,12 +36,16 @@ func runFile(path string) error {
 		return fmt.Errorf("could not read file: %w", err)
 	}
 
-	run(string(content))
+	interpreter := interpreter.New()
+
+	run(&interpreter, string(content))
 
 	return nil
 }
 
 func runPrompt() error {
+	interpreter := interpreter.New()
+
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -53,10 +56,7 @@ func runPrompt() error {
 		} else if err != nil {
 			return fmt.Errorf("could not read line: %w", err)
 		}
-		err = run(line)
-		if err != nil {
-			return fmt.Errorf("%w", err)
-		}
+		run(&interpreter, line)
 	}
 
 	return nil
