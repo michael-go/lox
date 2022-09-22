@@ -9,15 +9,23 @@ import (
 )
 
 type Interpreter struct {
+	Globals     *Environment
 	environment *Environment
 
 	// declare like this to be able to mock it in tests
 	Print func(str string)
 }
 
+type Return struct {
+	Value any
+}
+
 func New() Interpreter {
+	globalEnv := NewEnvironment(nil)
+	globalEnv.Define("clock", ClockFunc{})
 	return Interpreter{
-		environment: NewEnvironment(nil),
+		Globals:     globalEnv,
+		environment: globalEnv,
 		Print: func(str string) {
 			fmt.Print(str)
 		},
@@ -240,4 +248,38 @@ func (i *Interpreter) VisitWhileStmt(stmt ast.While) any {
 		i.execute(stmt.Body)
 	}
 	return nil
+}
+
+func (i *Interpreter) VisitCallExpr(call ast.Call) any {
+	callee := i.evaluate(call.Callee)
+
+	var args []any
+	for _, arg := range call.Arguments {
+		args = append(args, i.evaluate(arg))
+	}
+
+	if function, ok := callee.(LoxCallable); ok {
+		if len(args) != function.Arity() {
+			panic(globals.RuntimeError{Token: call.Paren, Message: fmt.Sprintf("Expected %d arguments but got %d.", function.Arity(), len(args))})
+		}
+		return function.Call(i, args)
+	}
+
+	panic(globals.RuntimeError{Token: call.Paren, Message: "Can only call functions and classes."})
+}
+
+func (i *Interpreter) VisitFunctionStmt(stmt ast.Function) any {
+	function := NewLoxFunction(&stmt, i.environment)
+	i.environment.Define(stmt.Name.Lexeme, function)
+	return nil
+}
+
+func (i *Interpreter) VisitReturnStmt(stmt ast.Return) any {
+	var value any
+	if stmt.Value != nil {
+		value = i.evaluate(stmt.Value)
+	}
+
+	// Using panic to return from a function is quite hacky, but ...
+	panic(Return{value})
 }

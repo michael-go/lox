@@ -17,6 +17,12 @@ type Expression struct {
 	Expression Expr
 }
 
+type Function struct {
+	Name   token.Token
+	Params []token.Token
+	Body   []Stmt
+}
+
 type If struct {
 	Condition  Expr
 	ThenBranch Stmt
@@ -25,6 +31,11 @@ type If struct {
 
 type Print struct {
 	Expression Expr
+}
+
+type Return struct {
+	Keyword token.Token
+	Value   Expr
 }
 
 type Var struct {
@@ -40,8 +51,10 @@ type While struct {
 type StmtVisitor interface {
 	VisitBlockStmt(stmt Block) any
 	VisitExpressionStmt(stmt Expression) any
+	VisitFunctionStmt(stmt Function) any
 	VisitIfStmt(stmt If) any
 	VisitPrintStmt(stmt Print) any
+	VisitReturnStmt(stmt Return) any
 	VisitVarStmt(stmt Var) any
 	VisitWhileStmt(stmt While) any
 }
@@ -54,12 +67,20 @@ func (stmt Expression) Accept(visitor StmtVisitor) any {
 	return visitor.VisitExpressionStmt(stmt)
 }
 
+func (stmt Function) Accept(visitor StmtVisitor) any {
+	return visitor.VisitFunctionStmt(stmt)
+}
+
 func (stmt If) Accept(visitor StmtVisitor) any {
 	return visitor.VisitIfStmt(stmt)
 }
 
 func (stmt Print) Accept(visitor StmtVisitor) any {
 	return visitor.VisitPrintStmt(stmt)
+}
+
+func (stmt Return) Accept(visitor StmtVisitor) any {
+	return visitor.VisitReturnStmt(stmt)
 }
 
 func (stmt Var) Accept(visitor StmtVisitor) any {

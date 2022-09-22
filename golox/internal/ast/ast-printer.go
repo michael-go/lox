@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+// TODO: rewrite this to print the AST as a tree
+
 type AstPrinter struct {
 }
 
@@ -113,6 +115,42 @@ func (p AstPrinter) VisitWhileStmt(stmt While) any {
 	builder.WriteString(stmt.Condition.Accept(p).(string))
 	builder.WriteString(" ")
 	builder.WriteString(stmt.Body.Accept(p).(string))
+
+	return builder.String()
+}
+
+func (p AstPrinter) VisitCallExpr(expr Call) any {
+	var builder strings.Builder
+
+	builder.WriteString("(")
+	builder.WriteString(expr.Callee.Accept(p).(string))
+	for _, argument := range expr.Arguments {
+		builder.WriteString(" ")
+		builder.WriteString(argument.Accept(p).(string))
+	}
+	builder.WriteString(")")
+
+	return builder.String()
+}
+
+func (p AstPrinter) VisitFunctionStmt(stmt Function) any {
+	var builder strings.Builder
+
+	builder.WriteString("fun ")
+	builder.WriteString(stmt.Name.Lexeme)
+	builder.WriteString(" ")
+	builder.WriteString(stmt.Accept(p).(string))
+
+	return builder.String()
+}
+
+func (p AstPrinter) VisitReturnStmt(stmt Return) any {
+	var builder strings.Builder
+
+	builder.WriteString("return ")
+	if stmt.Value != nil {
+		builder.WriteString(stmt.Value.Accept(p).(string))
+	}
 
 	return builder.String()
 }

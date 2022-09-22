@@ -41,11 +41,39 @@ func (p *Parser) decleration() ast.Stmt {
 	}
 	defer recorver()
 
+	if p.match(token.FUN) {
+		return p.function("function")
+	}
 	if p.match(token.VAR) {
 		return p.varDecleration()
 	}
 
 	return p.statement()
+}
+
+func (p *Parser) function(kind string) ast.Function {
+	name := p.consume(token.IDENTIFIER, "Expect "+kind+" name.")
+	p.consume(token.LEFT_PAREN, "Expect '(' after "+kind+" name.")
+	parameters := make([]token.Token, 0)
+	if !p.check(token.RIGHT_PAREN) {
+		for {
+			if len(parameters) >= 255 {
+				p.reportError(p.peek(), "Can't have more than 255 parameters.")
+			}
+
+			parameters = append(parameters, p.consume(token.IDENTIFIER, "Expect parameter name."))
+
+			if !p.check(token.COMMA) {
+				break
+			}
+			p.consume(token.COMMA, "Expect ',' between parameters.")
+		}
+	}
+	p.consume(token.RIGHT_PAREN, "Expect ')' after parameters.")
+	p.consume(token.LEFT_BRACE, "Expect '{' before "+kind+" body.")
+	body := p.block()
+
+	return ast.Function{Name: name, Params: parameters, Body: body}
 }
 
 func (p *Parser) varDecleration() ast.Stmt {
@@ -70,6 +98,9 @@ func (p *Parser) statement() ast.Stmt {
 	if p.match(token.PRINT) {
 		return p.printStatement()
 	}
+	if p.match(token.RETURN) {
+		return p.returnStatement()
+	}
 	if p.match(token.WHILE) {
 		return p.whileStatement()
 	}
@@ -78,6 +109,17 @@ func (p *Parser) statement() ast.Stmt {
 	}
 
 	return p.expressionStatement()
+}
+
+func (p *Parser) returnStatement() ast.Stmt {
+	keyword := p.previous()
+	var value ast.Expr
+	if !p.check(token.SEMICOLON) {
+		value = p.expression()
+	}
+
+	p.consume(token.SEMICOLON, "Expect ';' after return value.")
+	return ast.Return{Keyword: keyword, Value: value}
 }
 
 func (p *Parser) forStatement() ast.Stmt {
@@ -267,7 +309,40 @@ func (p *Parser) unary() ast.Expr {
 		return ast.Unary{Operator: operator, Right: right}
 	}
 
-	return p.primary()
+	return p.call()
+}
+
+func (p *Parser) call() ast.Expr {
+	expr := p.primary()
+
+	for {
+		if p.match(token.LEFT_PAREN) {
+			expr = p.finishCall(expr)
+		} else {
+			break
+		}
+	}
+
+	return expr
+}
+
+func (p *Parser) finishCall(callee ast.Expr) ast.Expr {
+	var arguments []ast.Expr = make([]ast.Expr, 0)
+	if !p.check(token.RIGHT_PAREN) {
+		for {
+			if len(arguments) >= 255 {
+				p.panicError(p.peek(), "Can't have more than 255 arguments.")
+			}
+			arguments = append(arguments, p.expression())
+			if !p.match(token.COMMA) {
+				break
+			}
+		}
+	}
+
+	paren := p.consume(token.RIGHT_PAREN, "Expect ')' after arguments.")
+
+	return ast.Call{Callee: callee, Paren: paren, Arguments: arguments}
 }
 
 func (p *Parser) primary() ast.Expr {

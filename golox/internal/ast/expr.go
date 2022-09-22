@@ -20,6 +20,12 @@ type Binary struct {
 	Right    Expr
 }
 
+type Call struct {
+	Callee    Expr
+	Paren     token.Token
+	Arguments []Expr
+}
+
 type Grouping struct {
 	Expression Expr
 }
@@ -46,6 +52,7 @@ type Variable struct {
 type ExprVisitor interface {
 	VisitAssignExpr(expr Assign) any
 	VisitBinaryExpr(expr Binary) any
+	VisitCallExpr(expr Call) any
 	VisitGroupingExpr(expr Grouping) any
 	VisitLiteralExpr(expr Literal) any
 	VisitLogicalExpr(expr Logical) any
@@ -59,6 +66,10 @@ func (expr Assign) Accept(visitor ExprVisitor) any {
 
 func (expr Binary) Accept(visitor ExprVisitor) any {
 	return visitor.VisitBinaryExpr(expr)
+}
+
+func (expr Call) Accept(visitor ExprVisitor) any {
+	return visitor.VisitCallExpr(expr)
 }
 
 func (expr Grouping) Accept(visitor ExprVisitor) any {

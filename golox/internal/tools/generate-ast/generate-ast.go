@@ -109,6 +109,7 @@ func main() {
 	defineAst(outputDir, "Expr", []string{
 		"Assign   : Name token.Token, Value Expr",
 		"Binary   : Left Expr, Operator token.Token, Right Expr",
+		"Call     : Callee Expr, Paren token.Token, Arguments []Expr",
 		"Grouping : Expression Expr",
 		"Literal  : Value any",
 		"Logical  : Left Expr, Operator token.Token, Right Expr",
@@ -119,8 +120,10 @@ func main() {
 	defineAst(outputDir, "Stmt", []string{
 		"Block      : Statements []Stmt",
 		"Expression : Expression Expr",
+		"Function   : Name token.Token, Params []token.Token, Body []Stmt",
 		"If         : Condition Expr, ThenBranch Stmt, ElseBranch Stmt",
 		"Print      : Expression Expr",
+		"Return     : Keyword token.Token, Value Expr",
 		"Var 	    : Name token.Token, Initializer Expr",
 		"While      : Condition Expr, Body Stmt",
 	})
