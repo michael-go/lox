@@ -67,6 +67,9 @@ func (r *Resolver) declare(name token.Token) {
 		return
 	}
 	scope := r.scopes[len(r.scopes)-1]
+	if _, ok := scope[name.Lexeme]; ok {
+		globals.ReportError(name.Line, "", "Already a variable with this name in this scope.")
+	}
 	scope[name.Lexeme] = false
 }
 

@@ -9,3 +9,16 @@ var a = "global";
   var a = "block";
   showA();
 }
+
+///
+
+fun readVarInInitializer() {
+  var x = x;
+}
+
+///
+
+fun duplicateLocalDecleration() {
+  var y = "first";
+  var y = "second";
+}
