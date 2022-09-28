@@ -7,9 +7,17 @@ import (
 	"github.com/michael-go/lox/golox/internal/token"
 )
 
+type FunctionType int
+
+const (
+	NONE FunctionType = iota
+	FUNCTION
+)
+
 type Resolver struct {
-	interp *interpreter.Interpreter
-	scopes []map[string]bool
+	interp          *interpreter.Interpreter
+	scopes          []map[string]bool
+	currentFunction FunctionType
 }
 
 func New(interp *interpreter.Interpreter) Resolver {
@@ -113,11 +121,14 @@ func (r *Resolver) VisitFunctionStmt(stmt *ast.Function) any {
 	r.declare(stmt.Name)
 	r.define(stmt.Name)
 
-	r.resolveFunction(stmt)
+	r.resolveFunction(stmt, FUNCTION)
 	return nil
 }
 
-func (r *Resolver) resolveFunction(stmt *ast.Function) any {
+func (r *Resolver) resolveFunction(stmt *ast.Function, funcType FunctionType) any {
+	encosingFunction := r.currentFunction
+	r.currentFunction = funcType
+
 	r.beginScope()
 	for _, param := range stmt.Params {
 		r.declare(param)
@@ -125,6 +136,8 @@ func (r *Resolver) resolveFunction(stmt *ast.Function) any {
 	}
 	r.Resolve(stmt.Body)
 	r.endScope()
+
+	r.currentFunction = encosingFunction
 	return nil
 }
 
@@ -143,6 +156,10 @@ func (r *Resolver) VisitPrintStmt(stmt *ast.Print) any {
 }
 
 func (r *Resolver) VisitReturnStmt(stmt *ast.Return) any {
+	if r.currentFunction == NONE {
+		globals.ReportError(stmt.Keyword.Line, "", "Can't return from top-level code.")
+	}
+
 	if stmt.Value != nil {
 		r.resolveExpr(stmt.Value)
 	}

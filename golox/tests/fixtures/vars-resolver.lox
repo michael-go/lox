@@ -22,3 +22,7 @@ fun duplicateLocalDecleration() {
   var y = "first";
   var y = "second";
 }
+
+///
+
+return "bye";
