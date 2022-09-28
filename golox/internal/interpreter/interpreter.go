@@ -10,6 +10,7 @@ import (
 
 type Interpreter struct {
 	Globals     *Environment
+	Locals      map[ast.Expr]int
 	environment *Environment
 
 	// declare like this to be able to mock it in tests
@@ -25,6 +26,7 @@ func New() Interpreter {
 	globalEnv.Define("clock", ClockFunc{})
 	return Interpreter{
 		Globals:     globalEnv,
+		Locals:      make(map[ast.Expr]int),
 		environment: globalEnv,
 		Print: func(str string) {
 			fmt.Print(str)
@@ -50,6 +52,10 @@ func (i *Interpreter) Interpret(statements []ast.Stmt) string {
 	return stringify(value)
 }
 
+func (i *Interpreter) Resolve(expr ast.Expr, depth int) {
+	i.Locals[expr] = depth
+}
+
 func (i *Interpreter) execute(stmt ast.Stmt) any {
 	return stmt.Accept(i)
 }
@@ -61,11 +67,11 @@ func stringify(obj any) string {
 	return fmt.Sprintf("%v", obj)
 }
 
-func (i *Interpreter) VisitLiteralExpr(expr ast.Literal) any {
+func (i *Interpreter) VisitLiteralExpr(expr *ast.Literal) any {
 	return expr.Value
 }
 
-func (i *Interpreter) VisitGroupingExpr(expr ast.Grouping) any {
+func (i *Interpreter) VisitGroupingExpr(expr *ast.Grouping) any {
 	return i.evaluate(expr.Expression)
 }
 
@@ -73,7 +79,7 @@ func (i *Interpreter) evaluate(expr ast.Expr) any {
 	return expr.Accept(i)
 }
 
-func (i *Interpreter) VisitUnaryExpr(expr ast.Unary) any {
+func (i *Interpreter) VisitUnaryExpr(expr *ast.Unary) any {
 	right := i.evaluate(expr.Right)
 
 	switch expr.Operator.Type {
@@ -87,7 +93,7 @@ func (i *Interpreter) VisitUnaryExpr(expr ast.Unary) any {
 	return nil
 }
 
-func (i *Interpreter) VisitBinaryExpr(expr ast.Binary) any {
+func (i *Interpreter) VisitBinaryExpr(expr *ast.Binary) any {
 	op := expr.Operator
 	left := i.evaluate(expr.Left)
 	right := i.evaluate(expr.Right)
@@ -172,18 +178,18 @@ func checkNumberOperands(operator token.Token, left any, right any) {
 	panic(globals.RuntimeError{Token: operator, Message: "Operands must be numbers."})
 }
 
-func (i *Interpreter) VisitExpressionStmt(stmt ast.Expression) any {
+func (i *Interpreter) VisitExpressionStmt(stmt *ast.Expression) any {
 	i.evaluate(stmt.Expression)
 	return nil
 }
 
-func (i *Interpreter) VisitPrintStmt(stmt ast.Print) any {
+func (i *Interpreter) VisitPrintStmt(stmt *ast.Print) any {
 	value := i.evaluate(stmt.Expression)
 	i.Print(fmt.Sprintln(stringify(value)))
 	return nil
 }
 
-func (i *Interpreter) VisitVarStmt(stmt ast.Var) any {
+func (i *Interpreter) VisitVarStmt(stmt *ast.Var) any {
 	var value any
 	if stmt.Initializer != nil {
 		value = i.evaluate(stmt.Initializer)
@@ -193,17 +199,32 @@ func (i *Interpreter) VisitVarStmt(stmt ast.Var) any {
 	return nil
 }
 
-func (i *Interpreter) VisitVariableExpr(expr ast.Variable) any {
-	return i.environment.Get(expr.Name)
+func (i *Interpreter) VisitVariableExpr(expr *ast.Variable) any {
+	return i.lookUpVariable(expr.Name, expr)
 }
 
-func (i *Interpreter) VisitAssignExpr(expr ast.Assign) any {
+func (i *Interpreter) lookUpVariable(name token.Token, expr ast.Expr) any {
+	distance, ok := i.Locals[expr]
+	if ok {
+		return i.environment.GetAt(distance, name)
+	}
+	return i.Globals.Get(name)
+}
+
+func (i *Interpreter) VisitAssignExpr(expr *ast.Assign) any {
 	value := i.evaluate(expr.Value)
-	i.environment.Assign(expr.Name, value)
+
+	distance, ok := i.Locals[expr]
+	if ok {
+		i.environment.AssignAt(distance, expr.Name, value)
+	} else {
+		i.Globals.Assign(expr.Name, value)
+	}
+
 	return value
 }
 
-func (i *Interpreter) VisitBlockStmt(stmt ast.Block) any {
+func (i *Interpreter) VisitBlockStmt(stmt *ast.Block) any {
 	i.executeBlock(stmt.Statements, NewEnvironment(i.environment))
 	return nil
 }
@@ -218,7 +239,7 @@ func (i *Interpreter) executeBlock(statements []ast.Stmt, env *Environment) {
 	}
 }
 
-func (i *Interpreter) VisitIfStmt(stmt ast.If) any {
+func (i *Interpreter) VisitIfStmt(stmt *ast.If) any {
 	if isTruthy(i.evaluate(stmt.Condition)) {
 		i.execute(stmt.ThenBranch)
 	} else if stmt.ElseBranch != nil {
@@ -227,7 +248,7 @@ func (i *Interpreter) VisitIfStmt(stmt ast.If) any {
 	return nil
 }
 
-func (i *Interpreter) VisitLogicalExpr(expr ast.Logical) any {
+func (i *Interpreter) VisitLogicalExpr(expr *ast.Logical) any {
 	left := i.evaluate(expr.Left)
 
 	if expr.Operator.Type == token.OR {
@@ -243,14 +264,14 @@ func (i *Interpreter) VisitLogicalExpr(expr ast.Logical) any {
 	return i.evaluate(expr.Right)
 }
 
-func (i *Interpreter) VisitWhileStmt(stmt ast.While) any {
+func (i *Interpreter) VisitWhileStmt(stmt *ast.While) any {
 	for isTruthy(i.evaluate(stmt.Condition)) {
 		i.execute(stmt.Body)
 	}
 	return nil
 }
 
-func (i *Interpreter) VisitCallExpr(call ast.Call) any {
+func (i *Interpreter) VisitCallExpr(call *ast.Call) any {
 	callee := i.evaluate(call.Callee)
 
 	var args []any
@@ -268,13 +289,13 @@ func (i *Interpreter) VisitCallExpr(call ast.Call) any {
 	panic(globals.RuntimeError{Token: call.Paren, Message: "Can only call functions and classes."})
 }
 
-func (i *Interpreter) VisitFunctionStmt(stmt ast.Function) any {
-	function := NewLoxFunction(&stmt, i.environment)
+func (i *Interpreter) VisitFunctionStmt(stmt *ast.Function) any {
+	function := NewLoxFunction(stmt, i.environment)
 	i.environment.Define(stmt.Name.Lexeme, function)
 	return nil
 }
 
-func (i *Interpreter) VisitReturnStmt(stmt ast.Return) any {
+func (i *Interpreter) VisitReturnStmt(stmt *ast.Return) any {
 	var value any
 	if stmt.Value != nil {
 		value = i.evaluate(stmt.Value)

@@ -10,6 +10,7 @@ import (
 	"github.com/michael-go/lox/golox/internal/globals"
 	"github.com/michael-go/lox/golox/internal/interpreter"
 	"github.com/michael-go/lox/golox/internal/parser"
+	"github.com/michael-go/lox/golox/internal/resolver"
 	"github.com/michael-go/lox/golox/internal/scanner"
 )
 
@@ -25,6 +26,9 @@ func run(interpreter *interpreter.Interpreter, source string) error {
 	if globals.HadError {
 		return fmt.Errorf("failed to parse")
 	}
+
+	resolver := resolver.New(interpreter)
+	resolver.Resolve(statements)
 
 	interpreter.Interpret(statements)
 	return nil

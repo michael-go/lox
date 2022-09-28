@@ -36,6 +36,18 @@ func (e *Environment) Get(name token.Token) any {
 	})
 }
 
+func (e *Environment) GetAt(distance int, name token.Token) any {
+	return e.ancestor(distance).values[name.Lexeme]
+}
+
+func (e *Environment) ancestor(distance int) *Environment {
+	env := e
+	for i := 0; i < distance; i++ {
+		env = env.enclosing
+	}
+	return env
+}
+
 func (e *Environment) Assign(name token.Token, value any) {
 	if _, ok := e.values[name.Lexeme]; ok {
 		e.values[name.Lexeme] = value
@@ -51,4 +63,8 @@ func (e *Environment) Assign(name token.Token, value any) {
 		Token:   name,
 		Message: "Undefined variable '" + name.Lexeme + "'.",
 	})
+}
+
+func (e *Environment) AssignAt(distance int, name token.Token, value any) {
+	e.ancestor(distance).values[name.Lexeme] = value
 }

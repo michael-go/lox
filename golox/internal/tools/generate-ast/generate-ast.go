@@ -37,12 +37,12 @@ type {{$name}} struct {
 
 type {{.BaseName}}Visitor interface {
 	{{range $name, $fields := .Classes -}}
-	Visit{{$name}}{{$.BaseName}}({{$.BaseName | ToLower}} {{$name}}) any
+	Visit{{$name}}{{$.BaseName}}({{$.BaseName | ToLower}} *{{$name}}) any
 	{{end}}
 }
 
 {{range $name, $fields := .Classes}}
-func ({{$.BaseName | ToLower}} {{$name}}) Accept(visitor {{$.BaseName}}Visitor) any {
+func ({{$.BaseName | ToLower}} *{{$name}}) Accept(visitor {{$.BaseName}}Visitor) any {
 	return visitor.Visit{{$name}}{{$.BaseName}}({{$.BaseName | ToLower}})
 }
 {{end}}
