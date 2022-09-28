@@ -1,0 +1,14 @@
+fun readVarInInitializer() {
+  var x = x;
+}
+
+///
+
+fun duplicateLocalDecleration() {
+  var y = "first";
+  var y = "second";
+}
+
+///
+
+return "bye";

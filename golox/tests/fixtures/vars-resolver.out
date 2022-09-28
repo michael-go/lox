@@ -1,7 +1,4 @@
-# exit code: 1
+# exit code: 0
 # stdout:
-[line 16] Error: : Can't read local variable in its own initializer.
-[line 23] Error: : Already a variable with this name in this scope.
-[line 28] Error: : Can't return from top-level code.
 global
 global

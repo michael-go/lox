@@ -1,0 +1,5 @@
+# exit code: 1
+# stdout:
+[line 2] Error: : Can't read local variable in its own initializer.
+[line 9] Error: : Already a variable with this name in this scope.
+[line 14] Error: : Can't return from top-level code.

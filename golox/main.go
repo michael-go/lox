@@ -29,6 +29,9 @@ func run(interpreter *interpreter.Interpreter, source string) error {
 
 	resolver := resolver.New(interpreter)
 	resolver.Resolve(statements)
+	if globals.HadError {
+		return fmt.Errorf("failed to resolve")
+	}
 
 	interpreter.Interpret(statements)
 	return nil
