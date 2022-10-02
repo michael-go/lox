@@ -41,6 +41,9 @@ func (p *Parser) decleration() ast.Stmt {
 	}
 	defer recorver()
 
+	if p.match(token.CLASS) {
+		return p.classDecleration()
+	}
 	if p.match(token.FUN) {
 		return p.function("function")
 	}
@@ -49,6 +52,20 @@ func (p *Parser) decleration() ast.Stmt {
 	}
 
 	return p.statement()
+}
+
+func (p *Parser) classDecleration() ast.Stmt {
+	name := p.consume(token.IDENTIFIER, "Expect class name.")
+	p.consume(token.LEFT_BRACE, "Expect '{' before class body.")
+
+	var methods []*ast.Function
+	for !p.check(token.RIGHT_BRACE) && !p.isAtEnd() {
+		methods = append(methods, p.function("method"))
+	}
+
+	p.consume(token.RIGHT_BRACE, "Expect '}' after class body.")
+
+	return &ast.Class{Name: name, Methods: methods}
 }
 
 func (p *Parser) function(kind string) *ast.Function {
@@ -222,6 +239,8 @@ func (p *Parser) assignment() ast.Expr {
 
 		if name, ok := expr.(*ast.Variable); ok {
 			return &ast.Assign{Name: name.Name, Value: value}
+		} else if get, ok := expr.(*ast.Get); ok {
+			return &ast.Set{Object: get.Object, Name: get.Name, Value: value}
 		}
 
 		p.panicError(equals, "Invalid assignment target.")
@@ -318,6 +337,9 @@ func (p *Parser) call() ast.Expr {
 	for {
 		if p.match(token.LEFT_PAREN) {
 			expr = p.finishCall(expr)
+		} else if p.match(token.DOT) {
+			name := p.consume(token.IDENTIFIER, "expect property name after '.'.")
+			expr = &ast.Get{Object: expr, Name: name}
 		} else {
 			break
 		}
@@ -358,6 +380,10 @@ func (p *Parser) primary() ast.Expr {
 
 	if p.match(token.NUMBER, token.STRING) {
 		return &ast.Literal{Value: p.previous().Literal}
+	}
+
+	if p.match(token.THIS) {
+		return &ast.This{Keyword: p.previous()}
 	}
 
 	if p.match(token.IDENTIFIER) {

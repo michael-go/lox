@@ -36,8 +36,8 @@ func (e *Environment) Get(name token.Token) any {
 	})
 }
 
-func (e *Environment) GetAt(distance int, name token.Token) any {
-	return e.ancestor(distance).values[name.Lexeme]
+func (e *Environment) GetAt(distance int, name string) any {
+	return e.ancestor(distance).values[name]
 }
 
 func (e *Environment) ancestor(distance int) *Environment {

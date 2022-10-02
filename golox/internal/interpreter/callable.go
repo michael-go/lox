@@ -8,14 +8,16 @@ type LoxCallable interface {
 }
 
 type LoxFunction struct {
-	declaration *ast.Function
-	closure     *Environment
+	declaration   *ast.Function
+	closure       *Environment
+	isInitializer bool
 }
 
-func NewLoxFunction(declaration *ast.Function, closure *Environment) *LoxFunction {
+func NewLoxFunction(declaration *ast.Function, closure *Environment, isInitializer bool) *LoxFunction {
 	return &LoxFunction{
-		declaration: declaration,
-		closure:     closure,
+		declaration:   declaration,
+		closure:       closure,
+		isInitializer: isInitializer,
 	}
 }
 
@@ -33,7 +35,11 @@ func (f LoxFunction) Call(interpreter *Interpreter, arguments []any) (ret any) {
 	defer func() {
 		if r := recover(); r != nil {
 			if err, ok := r.(Return); ok {
-				ret = err.Value
+				if f.isInitializer {
+					ret = f.closure.GetAt(0, "this")
+				} else {
+					ret = err.Value
+				}
 			} else {
 				panic(r)
 			}
@@ -41,10 +47,19 @@ func (f LoxFunction) Call(interpreter *Interpreter, arguments []any) (ret any) {
 	}()
 
 	interpreter.executeBlock(f.declaration.Body, environment)
+	if f.isInitializer {
+		return f.closure.GetAt(0, "this")
+	}
 	ret = nil
 	return
 }
 
 func (f LoxFunction) String() string {
 	return "<fn " + f.declaration.Name.Lexeme + ">"
+}
+
+func (f LoxFunction) Bind(instance *LoxInstance, isInitialzier bool) *LoxFunction {
+	environment := NewEnvironment(f.closure)
+	environment.Define("this", instance)
+	return NewLoxFunction(f.declaration, environment, isInitialzier)
 }

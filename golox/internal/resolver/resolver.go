@@ -10,14 +10,24 @@ import (
 type FunctionType int
 
 const (
-	NONE FunctionType = iota
+	NOT_FUNC FunctionType = iota
 	FUNCTION
+	INITIALIZER
+	METHOD
+)
+
+type ClassType int
+
+const (
+	NOT_CLASS ClassType = iota
+	CLASS
 )
 
 type Resolver struct {
-	interp          *interpreter.Interpreter
-	scopes          []map[string]bool
-	currentFunction FunctionType
+	interp              *interpreter.Interpreter
+	scopes              []map[string]bool
+	currentFunctionType FunctionType
+	currentClassType    ClassType
 }
 
 func New(interp *interpreter.Interpreter) Resolver {
@@ -126,8 +136,8 @@ func (r *Resolver) VisitFunctionStmt(stmt *ast.Function) any {
 }
 
 func (r *Resolver) resolveFunction(stmt *ast.Function, funcType FunctionType) any {
-	encosingFunction := r.currentFunction
-	r.currentFunction = funcType
+	encosingFunction := r.currentFunctionType
+	r.currentFunctionType = funcType
 
 	r.beginScope()
 	for _, param := range stmt.Params {
@@ -137,7 +147,7 @@ func (r *Resolver) resolveFunction(stmt *ast.Function, funcType FunctionType) an
 	r.Resolve(stmt.Body)
 	r.endScope()
 
-	r.currentFunction = encosingFunction
+	r.currentFunctionType = encosingFunction
 	return nil
 }
 
@@ -156,11 +166,14 @@ func (r *Resolver) VisitPrintStmt(stmt *ast.Print) any {
 }
 
 func (r *Resolver) VisitReturnStmt(stmt *ast.Return) any {
-	if r.currentFunction == NONE {
+	if r.currentFunctionType == NOT_FUNC {
 		globals.ReportError(stmt.Keyword.Line, "", "Can't return from top-level code.")
 	}
 
 	if stmt.Value != nil {
+		if r.currentFunctionType == INITIALIZER {
+			globals.ReportError(stmt.Keyword.Line, "", "Can't return a value from an initializer.")
+		}
 		r.resolveExpr(stmt.Value)
 	}
 	return nil
@@ -204,5 +217,47 @@ func (r *Resolver) VisitLogicalExpr(expr *ast.Logical) any {
 
 func (r *Resolver) VisitUnaryExpr(expr *ast.Unary) any {
 	r.resolveExpr(expr.Right)
+	return nil
+}
+
+func (r *Resolver) VisitClassStmt(stmt *ast.Class) any {
+	r.declare(stmt.Name)
+	r.define(stmt.Name)
+
+	r.beginScope()
+	enclosingClass := r.currentClassType
+	r.currentClassType = CLASS
+	r.scopes[len(r.scopes)-1]["this"] = true
+
+	for _, method := range stmt.Methods {
+		declaration := METHOD
+		if method.Name.Lexeme == "init" {
+			declaration = INITIALIZER
+		}
+		r.resolveFunction(method, declaration)
+	}
+	r.currentClassType = enclosingClass
+	r.endScope()
+
+	return nil
+}
+
+func (r *Resolver) VisitGetExpr(expr *ast.Get) any {
+	r.resolveExpr(expr.Object)
+	return nil
+}
+
+func (r *Resolver) VisitSetExpr(expr *ast.Set) any {
+	r.resolveExpr(expr.Value)
+	r.resolveExpr(expr.Object)
+	return nil
+}
+
+func (r *Resolver) VisitThisExpr(expr *ast.This) any {
+	if r.currentClassType == NOT_CLASS {
+		globals.ReportError(expr.Keyword.Line, "", "Can't use 'this' outside of a class.")
+		return nil
+	}
+	r.resolveLocal(expr, expr.Keyword)
 	return nil
 }

@@ -206,7 +206,7 @@ func (i *Interpreter) VisitVariableExpr(expr *ast.Variable) any {
 func (i *Interpreter) lookUpVariable(name token.Token, expr ast.Expr) any {
 	distance, ok := i.Locals[expr]
 	if ok {
-		return i.environment.GetAt(distance, name)
+		return i.environment.GetAt(distance, name.Lexeme)
 	}
 	return i.Globals.Get(name)
 }
@@ -290,7 +290,7 @@ func (i *Interpreter) VisitCallExpr(call *ast.Call) any {
 }
 
 func (i *Interpreter) VisitFunctionStmt(stmt *ast.Function) any {
-	function := NewLoxFunction(stmt, i.environment)
+	function := NewLoxFunction(stmt, i.environment, false)
 	i.environment.Define(stmt.Name.Lexeme, function)
 	return nil
 }
@@ -303,4 +303,42 @@ func (i *Interpreter) VisitReturnStmt(stmt *ast.Return) any {
 
 	// Using panic to return from a function is quite hacky, but ...
 	panic(Return{value})
+}
+
+func (i *Interpreter) VisitClassStmt(stmt *ast.Class) any {
+	i.environment.Define(stmt.Name.Lexeme, nil)
+
+	methods := make(map[string]*LoxFunction)
+	for _, method := range stmt.Methods {
+		function := NewLoxFunction(method, i.environment, method.Name.Lexeme == "init")
+		methods[method.Name.Lexeme] = function
+	}
+
+	class := NewLoxClass(stmt.Name.Lexeme, methods)
+	i.environment.Assign(stmt.Name, class)
+	return nil
+}
+
+func (i *Interpreter) VisitGetExpr(expr *ast.Get) any {
+	object := i.evaluate(expr.Object)
+	if obj, ok := object.(*LoxInstance); ok {
+		return obj.Get(expr.Name)
+	}
+
+	panic(globals.RuntimeError{Token: expr.Name, Message: "Only instances have properties."})
+}
+
+func (i *Interpreter) VisitSetExpr(expr *ast.Set) any {
+	object := i.evaluate(expr.Object)
+	if obj, ok := object.(*LoxInstance); ok {
+		value := i.evaluate(expr.Value)
+		obj.Set(expr.Name, value)
+		return value
+	}
+
+	panic(globals.RuntimeError{Token: expr.Name, Message: "Only instances have properties."})
+}
+
+func (i *Interpreter) VisitThisExpr(expr *ast.This) any {
+	return i.lookUpVariable(expr.Keyword, expr)
 }

@@ -1,0 +1,4 @@
+# exit code: 1
+# stdout:
+[line 2] Error: : Can't use 'this' outside of a class.
+[line 5] Error: : Can't use 'this' outside of a class.

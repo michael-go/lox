@@ -1,0 +1,70 @@
+class DevonshireCream {
+  serveOn() {
+    return "Scones";
+  }
+}
+
+print DevonshireCream; // Prints "DevonshireCream".
+
+///
+
+class Bagel {}
+var bagel = Bagel();
+print bagel; // Prints "Bagel instance".
+
+class Toast {
+  eat() {
+    print "Crunch crunch crunch!";
+  }
+}
+
+///
+
+var t = Toast();
+t.eat(); // Prints "Crunch crunch crunch!".
+
+///
+
+class Cake {
+  taste() {
+    var adjective = "delicious";
+    print "The " + this.flavor + " cake is " + adjective + "!";
+  }
+}
+
+var cake = Cake();
+cake.flavor = "chocolate";
+cake.taste(); // Prints "The chocolate cake is delicious!".
+cake.flavor = "carrot";
+var f = cake.taste;
+f(); // Prints "The carrot cake is delicious!".
+
+///
+
+class Foo {
+  init() {
+    print "in init():";
+    print this;
+  }
+}
+
+var foo = Foo();
+var ret = foo.init();
+print "after init():";
+print ret;
+
+///
+
+class Bar {
+  init() {
+    this.x = 1;
+    this.y = 2;
+    return;
+  }
+
+  avg() {
+    return (this.x + this.y) / 2;
+  }
+}
+
+print Bar().avg(); // Prints "1.5".

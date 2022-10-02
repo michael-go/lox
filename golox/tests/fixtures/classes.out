@@ -1,0 +1,14 @@
+# exit code: 0
+# stdout:
+DevonshireCream
+Bagel instance
+Crunch crunch crunch!
+The chocolate cake is delicious!
+The carrot cake is delicious!
+in init():
+Foo instance
+in init():
+Foo instance
+after init():
+Foo instance
+1.5

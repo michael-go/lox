@@ -13,6 +13,11 @@ type Block struct {
 	Statements []Stmt
 }
 
+type Class struct {
+	Name    token.Token
+	Methods []*Function
+}
+
 type Expression struct {
 	Expression Expr
 }
@@ -50,6 +55,7 @@ type While struct {
 
 type StmtVisitor interface {
 	VisitBlockStmt(stmt *Block) any
+	VisitClassStmt(stmt *Class) any
 	VisitExpressionStmt(stmt *Expression) any
 	VisitFunctionStmt(stmt *Function) any
 	VisitIfStmt(stmt *If) any
@@ -61,6 +67,10 @@ type StmtVisitor interface {
 
 func (stmt *Block) Accept(visitor StmtVisitor) any {
 	return visitor.VisitBlockStmt(stmt)
+}
+
+func (stmt *Class) Accept(visitor StmtVisitor) any {
+	return visitor.VisitClassStmt(stmt)
 }
 
 func (stmt *Expression) Accept(visitor StmtVisitor) any {
