@@ -308,13 +308,35 @@ func (i *Interpreter) VisitReturnStmt(stmt *ast.Return) any {
 func (i *Interpreter) VisitClassStmt(stmt *ast.Class) any {
 	i.environment.Define(stmt.Name.Lexeme, nil)
 
+	if stmt.Superclass != nil {
+		i.environment = NewEnvironment(i.environment)
+		i.environment.Define("super", i.evaluate(stmt.Superclass))
+	}
+
+	var superValue any
+	var super *LoxClass
+	if stmt.Superclass != nil {
+		superValue = i.evaluate(stmt.Superclass)
+		if _, ok := superValue.(*LoxClass); !ok {
+			panic(globals.RuntimeError{Token: stmt.Superclass.Name, Message: "Superclass must be a class."})
+		}
+		super = superValue.(*LoxClass)
+	} else {
+		super = nil
+	}
+
 	methods := make(map[string]*LoxFunction)
 	for _, method := range stmt.Methods {
 		function := NewLoxFunction(method, i.environment, method.Name.Lexeme == "init")
 		methods[method.Name.Lexeme] = function
 	}
 
-	class := NewLoxClass(stmt.Name.Lexeme, methods)
+	class := NewLoxClass(stmt.Name.Lexeme, super, methods)
+
+	if stmt.Superclass != nil {
+		i.environment = i.environment.enclosing
+	}
+
 	i.environment.Assign(stmt.Name, class)
 	return nil
 }
@@ -341,4 +363,22 @@ func (i *Interpreter) VisitSetExpr(expr *ast.Set) any {
 
 func (i *Interpreter) VisitThisExpr(expr *ast.This) any {
 	return i.lookUpVariable(expr.Keyword, expr)
+}
+
+func (i *Interpreter) VisitSuperExpr(expr *ast.Super) any {
+	distance, ok := i.Locals[expr]
+	if !ok {
+		panic("No distance found for super expression")
+	}
+
+	super := i.environment.GetAt(distance, "super").(*LoxClass)
+	object := i.environment.GetAt(distance-1, "this").(*LoxInstance)
+
+	method := super.FindMethod(expr.Method.Lexeme)
+	if method == nil {
+		panic(globals.RuntimeError{Token: expr.Method, Message: fmt.Sprintf("Undefined property '%s'.", expr.Method.Lexeme)})
+	}
+
+	// TODO: can it be init()?
+	return method.Bind(object, false)
 }

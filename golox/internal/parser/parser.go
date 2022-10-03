@@ -56,6 +56,13 @@ func (p *Parser) decleration() ast.Stmt {
 
 func (p *Parser) classDecleration() ast.Stmt {
 	name := p.consume(token.IDENTIFIER, "Expect class name.")
+
+	var superclass *ast.Variable
+	if p.match(token.LESS) {
+		p.consume(token.IDENTIFIER, "Expect superclass name.")
+		superclass = &ast.Variable{Name: p.previous()}
+	}
+
 	p.consume(token.LEFT_BRACE, "Expect '{' before class body.")
 
 	var methods []*ast.Function
@@ -65,7 +72,7 @@ func (p *Parser) classDecleration() ast.Stmt {
 
 	p.consume(token.RIGHT_BRACE, "Expect '}' after class body.")
 
-	return &ast.Class{Name: name, Methods: methods}
+	return &ast.Class{Name: name, Superclass: superclass, Methods: methods}
 }
 
 func (p *Parser) function(kind string) *ast.Function {
@@ -380,6 +387,13 @@ func (p *Parser) primary() ast.Expr {
 
 	if p.match(token.NUMBER, token.STRING) {
 		return &ast.Literal{Value: p.previous().Literal}
+	}
+
+	if p.match(token.SUPER) {
+		keyword := p.previous()
+		p.consume(token.DOT, "Expect '.' after 'super'.")
+		method := p.consume(token.IDENTIFIER, "Expect superclass method name.")
+		return &ast.Super{Keyword: keyword, Method: method}
 	}
 
 	if p.match(token.THIS) {

@@ -21,6 +21,7 @@ type ClassType int
 const (
 	NOT_CLASS ClassType = iota
 	CLASS
+	SUBCLASS
 )
 
 type Resolver struct {
@@ -221,12 +222,27 @@ func (r *Resolver) VisitUnaryExpr(expr *ast.Unary) any {
 }
 
 func (r *Resolver) VisitClassStmt(stmt *ast.Class) any {
+	enclosingClass := r.currentClassType
+	r.currentClassType = CLASS
+
 	r.declare(stmt.Name)
 	r.define(stmt.Name)
 
+	if stmt.Superclass != nil {
+		if stmt.Name.Lexeme == stmt.Superclass.Name.Lexeme {
+			globals.ReportError(stmt.Superclass.Name.Line, "", "A class can't inherit from itself.")
+		}
+
+		r.currentClassType = SUBCLASS
+		r.resolveExpr(stmt.Superclass)
+	}
+
+	if stmt.Superclass != nil {
+		r.beginScope()
+		r.scopes[len(r.scopes)-1]["super"] = true
+	}
+
 	r.beginScope()
-	enclosingClass := r.currentClassType
-	r.currentClassType = CLASS
 	r.scopes[len(r.scopes)-1]["this"] = true
 
 	for _, method := range stmt.Methods {
@@ -238,6 +254,10 @@ func (r *Resolver) VisitClassStmt(stmt *ast.Class) any {
 	}
 	r.currentClassType = enclosingClass
 	r.endScope()
+
+	if stmt.Superclass != nil {
+		r.endScope()
+	}
 
 	return nil
 }
@@ -256,6 +276,19 @@ func (r *Resolver) VisitSetExpr(expr *ast.Set) any {
 func (r *Resolver) VisitThisExpr(expr *ast.This) any {
 	if r.currentClassType == NOT_CLASS {
 		globals.ReportError(expr.Keyword.Line, "", "Can't use 'this' outside of a class.")
+		return nil
+	}
+	r.resolveLocal(expr, expr.Keyword)
+	return nil
+}
+
+func (r *Resolver) VisitSuperExpr(expr *ast.Super) any {
+	if r.currentClassType == NOT_CLASS {
+		globals.ReportError(expr.Keyword.Line, "", "Can't use 'super' outside of a class.")
+		return nil
+	}
+	if r.currentClassType != SUBCLASS {
+		globals.ReportError(expr.Keyword.Line, "", "Can't use 'super' in a class with no superclass.")
 		return nil
 	}
 	r.resolveLocal(expr, expr.Keyword)

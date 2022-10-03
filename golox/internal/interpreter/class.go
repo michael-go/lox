@@ -5,9 +5,14 @@ import (
 	"github.com/michael-go/lox/golox/internal/token"
 )
 
+type ILoxClass interface {
+	FindMethod(name string) *LoxFunction
+}
+
 type LoxClass struct {
-	name    string
-	methods map[string]*LoxFunction
+	name       string
+	superclass ILoxClass
+	methods    map[string]*LoxFunction
 }
 
 type LoxInstance struct {
@@ -15,10 +20,11 @@ type LoxInstance struct {
 	fields map[string]any
 }
 
-func NewLoxClass(name string, methods map[string]*LoxFunction) *LoxClass {
+func NewLoxClass(name string, superclass ILoxClass, methods map[string]*LoxFunction) *LoxClass {
 	return &LoxClass{
-		name:    name,
-		methods: methods,
+		name:       name,
+		superclass: superclass,
+		methods:    methods,
 	}
 }
 
@@ -27,7 +33,7 @@ func (c *LoxClass) String() string {
 }
 
 func (c *LoxClass) Arity() int {
-	initializer := c.methods["init"]
+	initializer := c.FindMethod("init")
 	if initializer == nil {
 		return 0
 	}
@@ -40,6 +46,21 @@ func (c *LoxClass) Call(interpreter *Interpreter, arguments []any) any {
 		initializer.Bind(instance, true).Call(interpreter, arguments)
 	}
 	return instance
+}
+
+func (i *LoxClass) FindMethod(name string) *LoxFunction {
+	if method, ok := i.methods[name]; ok {
+		return method
+	}
+
+	// TODO: this is quite hacky, kinda makes the interface not used as intended
+	//  but was a way to detect interface wrapping a nil value
+	//  for related discussion see: https://stackoverflow.com/questions/13476349/check-for-nil-and-nil-interface-in-go
+	if super, ok := i.superclass.(*LoxClass); ok && super != nil {
+		return super.FindMethod(name)
+	}
+
+	return nil
 }
 
 func NewLoxInstance(class *LoxClass) *LoxInstance {
@@ -58,7 +79,7 @@ func (i *LoxInstance) Get(name token.Token) any {
 		return value
 	}
 
-	method := i.class.methods[name.Lexeme]
+	method := i.class.FindMethod(name.Lexeme)
 	if method != nil {
 		method := method.Bind(i, method.isInitializer)
 		return method
