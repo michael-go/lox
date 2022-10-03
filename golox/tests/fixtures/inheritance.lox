@@ -1,10 +1,19 @@
 class Doughnut {
+  init() {
+    print "init Doughnut";
+  }
+
   cook() {
     print "Fry until golden brown.";
   }
 }
 
 class BostonCream < Doughnut {
+  init() {
+    super.init();
+    print "init BostonCream";
+  }
+
   cook() {
     super.cook();
     print "Pipe full of custard and coat with chocolate.";
