@@ -1,3 +1,5 @@
+use num_traits::FromPrimitive;
+
 use crate::chunk::*;
 use crate::value::*;
 
@@ -66,20 +68,20 @@ impl VM {
             }
 
             let instruction = self.read_byte();
-            match instruction {
-                op if op == OpCode::Constant.u8() => {
+            match FromPrimitive::from_u8(instruction) {
+                Some(OpCode::Constant) => {
                     let constant = self.read_constant();
                     self.push(constant);
                 }
-                op if op == OpCode::Negate.u8() => {
+                Some(OpCode::Negate) => {
                     let value = self.pop();
                     self.push(-value);
                 }
-                op if op == OpCode::Return.u8() => {
+                Some(OpCode::Return) => {
                     VM::print_value(self.pop());
                     return Ok(());
                 }
-                _ => {
+                None => {
                     println!("Unknown opcode {}", instruction);
                     return Err(LoxError::new(
                         LoxErrorKind::RuntimeError,
