@@ -73,6 +73,18 @@ impl VM {
                     let constant = self.read_constant();
                     self.push(constant);
                 }
+                Some(OpCode::Add) => {
+                    self.binary_op(|a, b| a + b);
+                }
+                Some(OpCode::Subtract) => {
+                    self.binary_op(|a, b| a - b);
+                }
+                Some(OpCode::Multiply) => {
+                    self.binary_op(|a, b| a * b);
+                }
+                Some(OpCode::Divide) => {
+                    self.binary_op(|a, b| a / b);
+                }
                 Some(OpCode::Negate) => {
                     let value = self.pop();
                     self.push(-value);
@@ -113,5 +125,11 @@ impl VM {
 
     fn pop(&mut self) -> Value {
         self.stack.pop().unwrap()
+    }
+
+    fn binary_op(&mut self, op: fn(Value, Value) -> Value) {
+        let b = self.pop();
+        let a = self.pop();
+        self.push(op(a, b));
     }
 }

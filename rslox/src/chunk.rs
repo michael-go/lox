@@ -6,6 +6,10 @@ use crate::value::Value;
 #[derive(FromPrimitive)]
 pub enum OpCode {
     Constant = 0,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
     Negate,
     Return,
 }
@@ -62,9 +66,13 @@ impl Chunk {
 
         let instruction = self.code[offset];
         match FromPrimitive::from_u8(instruction) {
-            Some(OpCode::Constant) => self.dissasemble_constant_instruction("OpConstant", offset),
+            Some(OpCode::Constant) => self.dissasemble_constant_instruction("Constant", offset),
+            Some(OpCode::Add) => self.dissasemble_simple_instruction("Add", offset),
+            Some(OpCode::Subtract) => self.dissasemble_simple_instruction("Subtract", offset),
+            Some(OpCode::Multiply) => self.dissasemble_simple_instruction("Multiply", offset),
+            Some(OpCode::Divide) => self.dissasemble_simple_instruction("Divide", offset),
             Some(OpCode::Negate) => self.dissasemble_simple_instruction("Negate", offset),
-            Some(OpCode::Return) => self.dissasemble_simple_instruction("OpReturn", offset),
+            Some(OpCode::Return) => self.dissasemble_simple_instruction("Return", offset),
             None => {
                 println!("Unknown opcode {}", instruction);
                 offset + 1
