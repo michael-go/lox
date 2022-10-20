@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use crate::value::Value;
 
 pub enum OpCode {
-    OpConstant = 0,
-    OpReturn,
+    Constant = 0,
+    Negate,
+    Return,
 }
 
 impl OpCode {
@@ -11,11 +13,10 @@ impl OpCode {
     }
 }
 
-type Value = f64;
 
 pub struct Chunk {
-    code: Vec<u8>,
-    constants: Vec<Value>,
+    pub code: Vec<u8>,
+    pub constants: Vec<Value>,
     lines: HashMap<usize, usize>,
 }
 
@@ -47,7 +48,7 @@ impl Chunk {
         }
     }
 
-    fn disassemble_instruction(&self, offset: usize) -> usize {
+    pub fn disassemble_instruction(&self, offset: usize) -> usize {
         print!("{:04} ", offset);
         
         if offset > 0 && self.lines.get(&offset) == self.lines.get(&(offset - 1)) {
@@ -60,10 +61,13 @@ impl Chunk {
         let instruction = self.code[offset];
         match instruction {
             // TODO: maybe instead add OpCode::from_u8() and match on Result/Error
-            op if op == OpCode::OpConstant.u8() => {
+            op if op == OpCode::Constant.u8() => {
                 self.dissasemble_constant_instruction("OpConstant", offset)
             }
-            op if op == OpCode::OpReturn.u8() => {
+            op if op == OpCode::Negate.u8() => {
+                self.dissasemble_simple_instruction("Negate", offset)
+            }
+            op if op == OpCode::Return.u8() => {
                 self.dissasemble_simple_instruction("OpReturn", offset)
             }
             _ => {

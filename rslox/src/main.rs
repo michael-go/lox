@@ -1,13 +1,25 @@
 mod chunk;
+mod value;
+mod vm;
 
-fn main() {
+fn main() -> Result<(), vm::LoxError> {
     let mut chunk = chunk::Chunk::new();
     
     let constant = chunk.add_constant(1.2);
-    chunk.write_chunk(chunk::OpCode::OpConstant.u8(), 123);
+    chunk.write_chunk(chunk::OpCode::Constant.u8(), 123);
     chunk.write_chunk(constant, 123);
-    chunk.write_chunk(chunk::OpCode::OpReturn.u8(), 123);
-    chunk.write_chunk(137, 234);
+    chunk.write_chunk(chunk::OpCode::Negate.u8(), 123);
+    chunk.write_chunk(chunk::OpCode::Return.u8(), 200);
     
-    chunk.dissasemble("test chunk");
+    // chunk.dissasemble("test chunk");
+    
+    println!("");
+    
+    let mut vm = vm::VM::new(chunk);
+    // TODO: control options by args / env
+    if let Err(e) = vm.interpret(vm::Options { trace_execution: true }) {
+        println!("Error: {:?}", e);
+        return Err(e);
+    }
+    return Ok(());
 }
