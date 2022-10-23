@@ -7,3 +7,4 @@ edition = "2021"
 num-traits = "0.2"
 num-derive = "0.2"
 clap = { version = "4.0.17", features = ["derive"] }
+anyhow = { version = "1.0.66", features = ["backtrace"] }

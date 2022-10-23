@@ -1,12 +1,15 @@
 mod chunk;
+mod compiler;
+mod scanner;
 mod value;
 mod vm;
 
 #[macro_use]
 extern crate num_derive;
 
-use chunk::OpCode;
+use anyhow::Result;
 use clap::Parser;
+use std::io::{self, Write};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -14,37 +17,46 @@ struct Args {
     disassemble: bool,
     #[arg(short, long)]
     trace_execution: bool,
+
+    lox_file: Option<String>,
 }
 
-fn main() -> Result<(), vm::LoxError> {
-    let args = Args::parse();
-
-    let mut chunk = chunk::Chunk::new();
-    let constant = chunk.add_constant(1.2);
-    chunk.write_chunk(chunk::OpCode::Constant.u8(), 123);
-    chunk.write_chunk(constant, 123);
-    let constant2 = chunk.add_constant(3.4);
-    chunk.write_chunk(OpCode::Constant.u8(), 123);
-    chunk.write_chunk(constant2, 123);
-    chunk.write_chunk(OpCode::Add.u8(), 123);
-    let constant3 = chunk.add_constant(5.6);
-    chunk.write_chunk(OpCode::Constant.u8(), 123);
-    chunk.write_chunk(constant3, 123);
-    chunk.write_chunk(OpCode::Divide.u8(), 123);
-    chunk.write_chunk(chunk::OpCode::Negate.u8(), 123);
-    chunk.write_chunk(chunk::OpCode::Return.u8(), 200);
-
-    if args.disassemble {
-        chunk.dissasemble("test chunk");
-        println!("");
-    } else {
-        let mut vm = vm::VM::new(chunk);
-        if let Err(e) = vm.interpret(vm::Options {
-            trace_execution: args.trace_execution,
-        }) {
-            println!("Error: {:?}", e);
-            return Err(e);
+fn repl(options: vm::Options) -> Result<()> {
+    let mut vm = vm::VM::new(options);
+    loop {
+        print!("> ");
+        io::stdout().flush()?;
+        let mut line = String::new();
+        io::stdin().read_line(&mut line)?;
+        let result = vm.interpret(&line);
+        match result {
+            Ok(_) => (),
+            Err(e) => println!("{}", e),
         }
     }
-    return Ok(());
+}
+
+fn run_file(path: &str, options: vm::Options) -> Result<()> {
+    let mut vm = vm::VM::new(options);
+
+    let source = std::fs::read_to_string(path)?;
+    let _ = vm.interpret(&source);
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    std::env::set_var("RUST_BACKTRACE", "full");
+
+    let args = Args::parse();
+
+    let options = vm::Options {
+        trace_execution: args.trace_execution,
+    };
+
+    // TODO: handle errors
+    if let Some(lox_file) = args.lox_file {
+        run_file(&lox_file, options)
+    } else {
+        repl(options)
+    }
 }
