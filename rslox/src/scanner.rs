@@ -1,4 +1,4 @@
-#[derive(PartialEq, Debug,Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum TokenKind {
     // Single character tokens:
     LeftParen = 0,
@@ -47,7 +47,7 @@ pub enum TokenKind {
     Eof,
 }
 
-#[derive(Debug, PartialEq,Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub lexeme: String, // TODO: try to make it a ref
@@ -303,10 +303,12 @@ mod tests {
 
     #[test]
     fn scan() {
-        let mut scanner = Scanner::new("
+        let mut scanner = Scanner::new(
+            "
             fun foo() { // comment 
                 return 3 * (4 + 5);
-            }");
+            }",
+        );
         let mut tokens: Vec<super::Token> = Vec::new();
         loop {
             let token = scanner.scan_token();

@@ -5,8 +5,8 @@ use num_traits::FromPrimitive;
 use anyhow::Result;
 
 use crate::chunk::*;
-use crate::value::*;
 use crate::compiler;
+use crate::value::*;
 
 pub struct Options {
     pub trace_execution: bool,
@@ -19,7 +19,6 @@ impl Default for Options {
         }
     }
 }
-
 
 pub struct VM {
     chunk: Chunk,
@@ -66,7 +65,7 @@ impl VM {
             options: options,
         }
     }
-    
+
     fn init(&mut self, chunk: Chunk) {
         self.chunk = chunk;
         self.ip = 0;
@@ -127,7 +126,8 @@ impl VM {
                     return Err(LoxError::new(
                         LoxErrorKind::RuntimeError,
                         "Unknown opcode".to_string(),
-                    ).into());
+                    )
+                    .into());
                 }
             }
         }

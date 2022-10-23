@@ -66,7 +66,7 @@ impl Compiler {
             panic_mode: false,
         }
     }
-    
+
     pub fn compile(&mut self, source: &str) -> Result<chunk::Chunk> {
         *self = Compiler::new();
         self.scanner = scanner::Scanner::new(source);
