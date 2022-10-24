@@ -55,7 +55,7 @@ pub struct Token {
 }
 
 pub struct Scanner {
-    source: String,
+    source_chars: Vec<char>,
     start_pos: usize,
     current_pos: usize,
     line: usize,
@@ -64,7 +64,10 @@ pub struct Scanner {
 impl Scanner {
     pub fn new(source: &str) -> Scanner {
         Scanner {
-            source: source.to_string(), // TODO: avoid copy?
+            // this simplifies random access to the utf8 string,
+            //  but we can make it more efficient by holding the ref to original string instead,
+            //  and using start_pos and current_pos to index the utf8 byte positions
+            source_chars: source.chars().collect(),
             start_pos: 0,
             current_pos: 0,
             line: 1,
@@ -135,13 +138,15 @@ impl Scanner {
     }
 
     fn is_at_end(&self) -> bool {
-        self.current_pos >= self.source.len()
+        self.current_pos >= self.source_chars.len()
     }
 
     fn make_token(&self, kind: TokenKind) -> Token {
         Token {
             kind: kind,
-            lexeme: self.source[self.start_pos..self.current_pos].to_string(),
+            lexeme: self.source_chars[self.start_pos..self.current_pos]
+                .iter()
+                .collect(),
             line: self.line,
         }
     }
@@ -204,19 +209,18 @@ impl Scanner {
     }
 
     fn peek(&self) -> char {
-        // TODO: this is very inefficient, can we just index into the string instead ... or keep iterator as state?
-        if self.current_pos >= self.source.len() {
+        if self.current_pos >= self.source_chars.len() {
             return '\0';
         }
-        self.source.chars().nth(self.current_pos).unwrap()
+        self.source_chars[self.current_pos]
     }
 
     fn peek_next(&self) -> char {
-        if self.current_pos + 1 >= self.source.len() {
+        if self.current_pos + 1 >= self.source_chars.len() {
             return '\0';
         }
 
-        self.source.chars().nth(self.current_pos + 1).unwrap()
+        self.source_chars[self.current_pos + 1]
     }
 
     fn string(&mut self) -> Token {
@@ -263,7 +267,11 @@ impl Scanner {
     }
 
     fn identifier_type(&self) -> TokenKind {
-        match self.source[self.start_pos..self.current_pos].as_ref() {
+        match self.source_chars[self.start_pos..self.current_pos]
+            .iter()
+            .collect::<String>()
+            .as_str()
+        {
             "and" => TokenKind::And,
             "class" => TokenKind::Class,
             "else" => TokenKind::Else,

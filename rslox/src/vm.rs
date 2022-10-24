@@ -168,9 +168,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_interpret() {
+    fn arithmetic() {
         let mut vm = VM::new(Options::default());
         let res = vm.interpret("3 * (1 + 2)").unwrap();
         assert_eq!(res, 9.0);
+    }
+
+    #[test]
+    fn unicode_comment() {
+        let mut vm = VM::new(Options::default());
+        let res = vm
+            .interpret(
+                "
+        // סבבה
+        1 / 2
+        ",
+            )
+            .unwrap();
+        assert_eq!(res, 0.5);
     }
 }
