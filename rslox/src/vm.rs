@@ -73,8 +73,7 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<Value> {
-        let mut compiler = compiler::Compiler::new();
-        let chunk = compiler.compile(source)?;
+        let chunk = compiler::Compiler::new(source).compile()?;
         if self.options.trace_execution {
             chunk.dissasemble("code");
         }

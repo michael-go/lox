@@ -7,16 +7,6 @@ use num_traits::{FromPrimitive, ToPrimitive};
 
 // TODO: avoid the clones
 
-// TODO: maybe split to Parser & Compiler
-pub struct Compiler {
-    scanner: scanner::Scanner,
-    chunk: chunk::Chunk,
-    current: scanner::Token,
-    previous: scanner::Token,
-    had_error: bool,
-    panic_mode: bool,
-}
-
 #[derive(FromPrimitive, ToPrimitive)]
 enum Precedence {
     None = 0,
@@ -48,10 +38,22 @@ struct ParseRule {
     precedence: Precedence,
 }
 
+// TODO: maybe split to Parser & Compiler
+pub struct Compiler {
+    scanner: scanner::Scanner,
+    chunk: chunk::Chunk,
+    current: scanner::Token,
+    previous: scanner::Token,
+    had_error: bool,
+    panic_mode: bool,
+    ran: bool,
+}
+
 impl Compiler {
     // TODO: bah ... don't really want a constructor here, just did it to avoid global var
-    pub fn new() -> Compiler {
-        let scanner = scanner::Scanner::new("");
+    //  another alternative is to have a function with a closure as context
+    pub fn new(source: &str) -> Compiler {
+        let scanner = scanner::Scanner::new(source);
         static EOF: scanner::Token = scanner::Token {
             kind: TokenKind::Eof,
             lexeme: String::new(),
@@ -64,12 +66,14 @@ impl Compiler {
             previous: EOF.clone(),
             had_error: false,
             panic_mode: false,
+            ran: false,
         }
     }
 
-    pub fn compile(&mut self, source: &str) -> Result<chunk::Chunk> {
-        *self = Compiler::new();
-        self.scanner = scanner::Scanner::new(source);
+    pub fn compile(&mut self) -> Result<chunk::Chunk> {
+        if self.ran {
+            return Err(anyhow::anyhow!("Compiler can only be used once"));
+        }
 
         self.advance();
         self.expression();
