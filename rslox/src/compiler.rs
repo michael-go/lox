@@ -5,8 +5,6 @@ use crate::scanner::TokenKind;
 use anyhow::Result;
 use num_traits::{FromPrimitive, ToPrimitive};
 
-// TODO: avoid the clones
-
 #[derive(FromPrimitive, ToPrimitive)]
 enum Precedence {
     None = 0,
@@ -32,25 +30,25 @@ impl Precedence {
     }
 }
 
-struct ParseRule {
-    prefix: Option<fn(&mut Compiler) -> Result<()>>,
-    infix: Option<fn(&mut Compiler) -> Result<()>>,
+struct ParseRule<'a> {
+    prefix: Option<fn(&mut Compiler<'a>) -> Result<()>>,
+    infix: Option<fn(&mut Compiler<'a>) -> Result<()>>,
     precedence: Precedence,
 }
 
 // TODO: maybe split to Parser & Compiler
-pub struct Compiler {
+pub struct Compiler<'a> {
     scanner: scanner::Scanner,
-    chunk: chunk::Chunk,
+    chunk: &'a mut chunk::Chunk,
     current: scanner::Token,
     previous: scanner::Token,
     ran: bool,
 }
 
-impl Compiler {
+impl<'a> Compiler<'a> {
     // TODO: bah ... don't really want a constructor here, just did it to avoid global var
     //  another alternative is to have a function with a closure as context
-    pub fn new(source: &str) -> Compiler {
+    pub fn new(source: &str, chunk: &'a mut chunk::Chunk) -> Compiler<'a> {
         let scanner = scanner::Scanner::new(source);
         static EOF: scanner::Token = scanner::Token {
             kind: TokenKind::Eof,
@@ -59,14 +57,14 @@ impl Compiler {
         };
         Compiler {
             scanner,
-            chunk: chunk::Chunk::new(),
+            chunk,
             current: EOF.clone(),
             previous: EOF.clone(),
             ran: false,
         }
     }
 
-    pub fn compile(&mut self) -> Result<chunk::Chunk> {
+    pub fn compile(&mut self) -> Result<()> {
         if self.ran {
             return Err(anyhow::anyhow!("Compiler can only be used once"));
         }
@@ -75,10 +73,10 @@ impl Compiler {
         self.expression()?;
 
         self.end();
-        Ok(self.chunk.clone())
+        Ok(())
     }
 
-    fn get_rule(kind: &TokenKind) -> ParseRule {
+    fn get_rule(kind: TokenKind) -> ParseRule<'a> {
         match kind {
             TokenKind::LeftParen => ParseRule {
                 prefix: Some(Compiler::grouping),
@@ -286,7 +284,7 @@ impl Compiler {
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<()> {
         self.advance()?;
 
-        let prefix_rule = Self::get_rule(&self.previous.kind).prefix;
+        let prefix_rule = Self::get_rule(self.previous.kind).prefix;
         match prefix_rule {
             Some(prefix_rule) => prefix_rule(self)?,
             None => {
@@ -294,9 +292,9 @@ impl Compiler {
             }
         };
 
-        while precedence.to_u8() <= Self::get_rule(&self.current.kind).precedence.to_u8() {
+        while precedence.to_u8() <= Self::get_rule(self.current.kind).precedence.to_u8() {
             self.advance()?;
-            let infix_rule = Self::get_rule(&self.previous.kind).infix;
+            let infix_rule = Self::get_rule(self.previous.kind).infix;
             match infix_rule {
                 Some(infix_rule) => infix_rule(self)?,
                 None => {
@@ -424,7 +422,7 @@ impl Compiler {
 
     fn binary(&mut self) -> Result<()> {
         let operator_type = self.previous.kind.clone();
-        let rule = Compiler::get_rule(&operator_type);
+        let rule = Compiler::get_rule(operator_type);
         self.parse_precedence(rule.precedence.next())?;
 
         match operator_type {
