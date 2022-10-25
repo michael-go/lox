@@ -33,8 +33,8 @@ impl Precedence {
 }
 
 struct ParseRule {
-    prefix: Option<fn(&mut Compiler)>,
-    infix: Option<fn(&mut Compiler)>,
+    prefix: Option<fn(&mut Compiler) -> Result<()>>,
+    infix: Option<fn(&mut Compiler) -> Result<()>>,
     precedence: Precedence,
 }
 
@@ -44,8 +44,6 @@ pub struct Compiler {
     chunk: chunk::Chunk,
     current: scanner::Token,
     previous: scanner::Token,
-    had_error: bool,
-    panic_mode: bool,
     ran: bool,
 }
 
@@ -64,8 +62,6 @@ impl Compiler {
             chunk: chunk::Chunk::new(),
             current: EOF.clone(),
             previous: EOF.clone(),
-            had_error: false,
-            panic_mode: false,
             ran: false,
         }
     }
@@ -75,15 +71,11 @@ impl Compiler {
             return Err(anyhow::anyhow!("Compiler can only be used once"));
         }
 
-        self.advance();
-        self.expression();
+        self.advance()?;
+        self.expression()?;
 
-        if self.had_error {
-            Err(anyhow::anyhow!("Compilation error"))
-        } else {
-            self.end();
-            Ok(self.chunk.clone())
-        }
+        self.end();
+        Ok(self.chunk.clone())
     }
 
     fn get_rule(kind: &TokenKind) -> ParseRule {
@@ -291,32 +283,31 @@ impl Compiler {
         }
     }
 
-    fn parse_precedence(&mut self, precedence: Precedence) {
-        self.advance();
+    fn parse_precedence(&mut self, precedence: Precedence) -> Result<()> {
+        self.advance()?;
 
         let prefix_rule = Self::get_rule(&self.previous.kind).prefix;
         match prefix_rule {
-            Some(prefix_rule) => prefix_rule(self),
+            Some(prefix_rule) => prefix_rule(self)?,
             None => {
-                self.error("Expect expression.");
-                return;
+                return self.error("Expect expression.");
             }
         };
 
         while precedence.to_u8() <= Self::get_rule(&self.current.kind).precedence.to_u8() {
-            self.advance();
+            self.advance()?;
             let infix_rule = Self::get_rule(&self.previous.kind).infix;
             match infix_rule {
-                Some(infix_rule) => infix_rule(self),
+                Some(infix_rule) => infix_rule(self)?,
                 None => {
-                    self.error(r"Compiler internal error ¯\_(ツ)_/¯.");
-                    return;
+                    return self.error(r"Compiler internal error ¯\_(ツ)_/¯.");
                 }
-            };
+            }
         }
+        Ok(())
     }
 
-    fn advance(&mut self) {
+    fn advance(&mut self) -> Result<()> {
         self.previous = self.current.clone();
 
         loop {
@@ -325,27 +316,24 @@ impl Compiler {
                 break;
             }
 
-            self.error_at_current(&self.current.lexeme.clone());
+            return self.error_at_current(&self.current.lexeme);
         }
+        Ok(())
     }
 
-    fn expression(&mut self) {
-        self.parse_precedence(Precedence::Assignment);
+    fn expression(&mut self) -> Result<()> {
+        self.parse_precedence(Precedence::Assignment)
     }
 
-    fn error_at_current(&mut self, message: &str) {
-        self.error_at(&self.current.clone(), message);
+    fn error_at_current(&self, message: &str) -> Result<()> {
+        self.error_at(&self.current, message)
     }
 
-    fn error(&mut self, message: &str) {
-        self.error_at(&self.previous.clone(), message);
+    fn error(&self, message: &str) -> Result<()> {
+        self.error_at(&self.previous, message)
     }
 
-    fn error_at(&mut self, token: &scanner::Token, message: &str) {
-        if self.panic_mode {
-            return;
-        }
-        self.panic_mode = true;
+    fn error_at(&self, token: &scanner::Token, message: &str) -> Result<()> {
         eprint!("[line {}] Error", token.line);
 
         if token.kind == scanner::TokenKind::Eof {
@@ -357,16 +345,15 @@ impl Compiler {
         }
 
         eprintln!(": {}", message);
-        self.had_error = true;
+        Err(anyhow::anyhow!("Compiler error"))
     }
 
-    fn consume(&mut self, kind: scanner::TokenKind, message: &str) {
+    fn consume(&mut self, kind: scanner::TokenKind, message: &str) -> Result<()> {
         if self.current.kind == kind {
-            self.advance();
-            return;
+            return self.advance();
         }
 
-        self.error_at_current(message);
+        self.error_at_current(message)
     }
 
     fn current_chunk(&mut self) -> &mut chunk::Chunk {
@@ -391,9 +378,10 @@ impl Compiler {
         self.emit_byte(chunk::OpCode::Return.u8());
     }
 
-    fn number(&mut self) {
+    fn number(&mut self) -> Result<()> {
         let value = self.previous.lexeme.parse::<f64>().unwrap();
         self.emit_constant(value);
+        Ok(())
     }
 
     fn emit_constant(&mut self, value: f64) {
@@ -412,38 +400,40 @@ impl Compiler {
         constant
     }
 
-    fn grouping(&mut self) {
-        self.expression();
+    fn grouping(&mut self) -> Result<()> {
+        self.expression()?;
         self.consume(
             scanner::TokenKind::RightParen,
             "Expect ')' after expression.",
-        );
+        )?;
+        Ok(())
     }
 
-    fn unary(&mut self) {
-        let operator_type = self.previous.clone().kind;
+    fn unary(&mut self) -> Result<()> {
+        let operator_type = self.previous.kind.clone();
 
         // Compile the operand.
-        self.parse_precedence(Precedence::Unary);
+        self.parse_precedence(Precedence::Unary)?;
 
         // Emit the operator instruction.
         match operator_type {
-            scanner::TokenKind::Minus => self.emit_byte(chunk::OpCode::Negate.u8()),
-            _ => return, // Unreachable.
+            scanner::TokenKind::Minus => Ok(self.emit_byte(chunk::OpCode::Negate.u8())),
+            _ => Err(anyhow::anyhow!("Internal compiler error")), // Unreachable.
         }
     }
 
-    fn binary(&mut self) {
-        let operator_type = self.previous.clone().kind;
+    fn binary(&mut self) -> Result<()> {
+        let operator_type = self.previous.kind.clone();
         let rule = Compiler::get_rule(&operator_type);
-        self.parse_precedence(rule.precedence.next());
+        self.parse_precedence(rule.precedence.next())?;
 
         match operator_type {
             scanner::TokenKind::Plus => self.emit_byte(chunk::OpCode::Add.u8()),
             scanner::TokenKind::Minus => self.emit_byte(chunk::OpCode::Subtract.u8()),
             scanner::TokenKind::Star => self.emit_byte(chunk::OpCode::Multiply.u8()),
             scanner::TokenKind::Slash => self.emit_byte(chunk::OpCode::Divide.u8()),
-            _ => return, // Unreachable.
+            _ => return Err(anyhow::anyhow!("Internal compiler error")), // Unreachable.
         }
+        Ok(())
     }
 }
