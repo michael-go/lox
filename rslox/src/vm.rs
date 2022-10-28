@@ -28,12 +28,12 @@ pub struct VM {
 }
 
 // TODO: move to common module, add CompilerError
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LoxErrorKind {
     RuntimeError,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct LoxError {
     #[allow(dead_code)]
     pub kind: LoxErrorKind,
@@ -100,25 +100,50 @@ impl VM {
                     let constant = self.read_constant();
                     self.push(constant);
                 }
+                Some(OpCode::Nil) => self.push(Value::Nil),
+                Some(OpCode::True) => self.push(Value::Bool(true)),
+                Some(OpCode::False) => self.push(Value::Bool(false)),
+                Some(OpCode::Equal) => {
+                    let b = self.pop();
+                    let a = self.pop();
+                    self.push(Value::Bool(a == b));
+                }
+                Some(OpCode::Greater) => {
+                    self.binary_op_compare(|a, b| a > b)?;
+                }
+                Some(OpCode::Less) => {
+                    self.binary_op_compare(|a, b| a < b)?;
+                }
                 Some(OpCode::Add) => {
-                    self.binary_op(|a, b| a + b);
+                    self.binary_op_num(|a, b| a + b)?;
                 }
                 Some(OpCode::Subtract) => {
-                    self.binary_op(|a, b| a - b);
+                    self.binary_op_num(|a, b| a - b)?;
                 }
                 Some(OpCode::Multiply) => {
-                    self.binary_op(|a, b| a * b);
+                    self.binary_op_num(|a, b| a * b)?;
                 }
                 Some(OpCode::Divide) => {
-                    self.binary_op(|a, b| a / b);
+                    self.binary_op_num(|a, b| a / b)?;
                 }
                 Some(OpCode::Negate) => {
                     let value = self.pop();
-                    self.push(-value);
+                    match value {
+                        Value::Number(v) => self.push(Value::Number(v * -1.0)),
+                        _ => return Err(self.runtime_error("Operand must be a number.").into()),
+                    }
+                }
+                Some(OpCode::Not) => {
+                    let value = self.pop();
+                    match value {
+                        Value::Bool(v) => self.push(Value::Bool(!v)),
+                        Value::Nil => self.push(Value::Bool(true)),
+                        _ => self.push(Value::Bool(false)),
+                    }
                 }
                 Some(OpCode::Return) => {
                     let value = self.pop();
-                    VM::print_value(value);
+                    println!("{}", value);
                     return Ok(value);
                 }
                 None => {
@@ -144,10 +169,6 @@ impl VM {
         self.chunk.constants[constant_index as usize]
     }
 
-    fn print_value(value: Value) {
-        println!("{}", value);
-    }
-
     fn push(&mut self, value: Value) {
         self.stack.push(value);
     }
@@ -156,10 +177,48 @@ impl VM {
         self.stack.pop().unwrap()
     }
 
-    fn binary_op(&mut self, op: fn(Value, Value) -> Value) {
+    fn reset_stack(&mut self) {
+        self.stack.clear();
+    }
+
+    fn peek(&self, distance: usize) -> Value {
+        self.stack[self.stack.len() - 1 - distance]
+    }
+
+    fn binary_op_num(&mut self, op: fn(f64, f64) -> f64) -> Result<()> {
         let b = self.pop();
         let a = self.pop();
-        self.push(op(a, b));
+
+        match (a, b) {
+            (Value::Number(a), Value::Number(b)) => {
+                self.push(Value::Number(op(a, b)));
+                Ok(())
+            }
+            _ => return Err(self.runtime_error("Operands must be numbers.").into()),
+        }
+    }
+
+    fn binary_op_compare(&mut self, op: fn(f64, f64) -> bool) -> Result<()> {
+        let b = self.pop();
+        let a = self.pop();
+
+        match (a, b) {
+            (Value::Number(a), Value::Number(b)) => {
+                self.push(Value::Bool(op(a, b)));
+                Ok(())
+            }
+            _ => return Err(self.runtime_error("Operands must be numbers.").into()),
+        }
+    }
+
+    fn runtime_error(&mut self, message: &str) -> LoxError {
+        eprintln!("Runtime error: {}", message);
+
+        let line = self.chunk.lines[&(self.ip - 1)];
+        eprintln!("[line {}] in script", line);
+        self.reset_stack();
+
+        return LoxError::new(LoxErrorKind::RuntimeError, message.to_string()).into();
     }
 }
 
@@ -171,7 +230,22 @@ mod tests {
     fn arithmetic() {
         let mut vm = VM::new(Options::default());
         let res = vm.interpret("3 * (1 + 2)").unwrap();
-        assert_eq!(res, 9.0);
+        if let Value::Number(n) = res {
+            assert_eq!(n, 9.0);
+        } else {
+            panic!("Expected number");
+        }
+    }
+
+    #[test]
+    fn compare() {
+        let mut vm = VM::new(Options::default());
+        let res = vm.interpret("!(5 - 4 > 3 * 2 == !nil)").unwrap();
+        if let Value::Bool(b) = res {
+            assert_eq!(b, true);
+        } else {
+            panic!("Expected bool");
+        }
     }
 
     #[test]
@@ -185,6 +259,18 @@ mod tests {
         ",
             )
             .unwrap();
-        assert_eq!(res, 0.5);
+        if let Value::Number(n) = res {
+            assert_eq!(n, 0.5);
+        } else {
+            panic!("Expected number");
+        }
+    }
+
+    #[test]
+    fn runtime_error() {
+        let mut vm = VM::new(Options::default());
+        let res = vm.interpret("1 + true");
+        // TODO: try to downcast to LoxError
+        assert_eq!(res.is_err(), true);
     }
 }

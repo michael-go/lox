@@ -6,11 +6,18 @@ use crate::value::Value;
 #[derive(FromPrimitive)]
 pub enum OpCode {
     Constant = 0,
+    Nil,
+    True,
+    False,
+    Equal,
+    Greater,
+    Less,
     Add,
     Subtract,
     Multiply,
     Divide,
     Negate,
+    Not,
     Return,
 }
 
@@ -24,7 +31,7 @@ impl OpCode {
 pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
-    lines: HashMap<usize, usize>,
+    pub lines: HashMap<usize, usize>,
 }
 
 impl Chunk {
@@ -55,6 +62,7 @@ impl Chunk {
         }
     }
 
+    // TODO: move to debug.rs
     pub fn disassemble_instruction(&self, offset: usize) -> usize {
         print!("{:04} ", offset);
 
@@ -68,11 +76,18 @@ impl Chunk {
         let instruction = self.code[offset];
         match FromPrimitive::from_u8(instruction) {
             Some(OpCode::Constant) => self.dissasemble_constant_instruction("Constant", offset),
+            Some(OpCode::Nil) => self.dissasemble_simple_instruction("Nil", offset),
+            Some(OpCode::True) => self.dissasemble_simple_instruction("True", offset),
+            Some(OpCode::False) => self.dissasemble_simple_instruction("False", offset),
+            Some(OpCode::Equal) => self.dissasemble_simple_instruction("Equal", offset),
+            Some(OpCode::Greater) => self.dissasemble_simple_instruction("Greater", offset),
+            Some(OpCode::Less) => self.dissasemble_simple_instruction("Less", offset),
             Some(OpCode::Add) => self.dissasemble_simple_instruction("Add", offset),
             Some(OpCode::Subtract) => self.dissasemble_simple_instruction("Subtract", offset),
             Some(OpCode::Multiply) => self.dissasemble_simple_instruction("Multiply", offset),
             Some(OpCode::Divide) => self.dissasemble_simple_instruction("Divide", offset),
             Some(OpCode::Negate) => self.dissasemble_simple_instruction("Negate", offset),
+            Some(OpCode::Not) => self.dissasemble_simple_instruction("Not", offset),
             Some(OpCode::Return) => self.dissasemble_simple_instruction("Return", offset),
             None => {
                 println!("Unknown opcode {}", instruction);
@@ -89,12 +104,7 @@ impl Chunk {
     fn dissasemble_constant_instruction(&self, arg: &str, offset: usize) -> usize {
         let constant = self.code[offset + 1];
         print!("{:16} {:4} '", arg, constant);
-        self.print_value(self.constants.get(constant as usize).unwrap());
-        print!("'\n");
+        println!("{}", self.constants.get(constant as usize).unwrap());
         offset + 2
-    }
-
-    fn print_value(&self, value: &Value) {
-        print!("{}", value);
     }
 }

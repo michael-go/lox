@@ -1,6 +1,7 @@
 use crate::chunk;
 use crate::scanner;
 use crate::scanner::TokenKind;
+use crate::value::Value;
 
 use anyhow::Result;
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -150,7 +151,7 @@ impl<'a> Compiler<'a> {
             },
             TokenKind::EqualEqual => ParseRule {
                 prefix: None,
-                infix: None,
+                infix: Some(Compiler::binary),
                 precedence: Precedence::Equality,
             },
             TokenKind::Greater => ParseRule {
@@ -204,7 +205,7 @@ impl<'a> Compiler<'a> {
                 precedence: Precedence::None,
             },
             TokenKind::False => ParseRule {
-                prefix: None,
+                prefix: Some(Compiler::literal),
                 infix: None,
                 precedence: Precedence::None,
             },
@@ -224,7 +225,7 @@ impl<'a> Compiler<'a> {
                 precedence: Precedence::None,
             },
             TokenKind::Nil => ParseRule {
-                prefix: None,
+                prefix: Some(Compiler::literal),
                 infix: None,
                 precedence: Precedence::None,
             },
@@ -254,7 +255,7 @@ impl<'a> Compiler<'a> {
                 precedence: Precedence::None,
             },
             TokenKind::True => ParseRule {
-                prefix: None,
+                prefix: Some(Compiler::literal),
                 infix: None,
                 precedence: Precedence::None,
             },
@@ -378,16 +379,16 @@ impl<'a> Compiler<'a> {
 
     fn number(&mut self) -> Result<()> {
         let value = self.previous.lexeme.parse::<f64>().unwrap();
-        self.emit_constant(value);
+        self.emit_constant(Value::Number(value));
         Ok(())
     }
 
-    fn emit_constant(&mut self, value: f64) {
+    fn emit_constant(&mut self, value: Value) {
         let constant = self.make_constant(value);
         self.emit_bytes(chunk::OpCode::Constant.u8(), constant);
     }
 
-    fn make_constant(&mut self, value: f64) -> u8 {
+    fn make_constant(&mut self, value: Value) -> u8 {
         let constant = self.current_chunk().add_constant(value);
         // TODO: ensure we don't allow more than u8::MAX constants
         //if constant > u8::MAX {
@@ -415,7 +416,8 @@ impl<'a> Compiler<'a> {
 
         // Emit the operator instruction.
         match operator_type {
-            scanner::TokenKind::Minus => Ok(self.emit_byte(chunk::OpCode::Negate.u8())),
+            TokenKind::Minus => Ok(self.emit_byte(chunk::OpCode::Negate.u8())),
+            TokenKind::Bang => Ok(self.emit_byte(chunk::OpCode::Not.u8())),
             _ => Err(anyhow::anyhow!("Internal compiler error")), // Unreachable.
         }
     }
@@ -426,10 +428,32 @@ impl<'a> Compiler<'a> {
         self.parse_precedence(rule.precedence.next())?;
 
         match operator_type {
-            scanner::TokenKind::Plus => self.emit_byte(chunk::OpCode::Add.u8()),
-            scanner::TokenKind::Minus => self.emit_byte(chunk::OpCode::Subtract.u8()),
-            scanner::TokenKind::Star => self.emit_byte(chunk::OpCode::Multiply.u8()),
-            scanner::TokenKind::Slash => self.emit_byte(chunk::OpCode::Divide.u8()),
+            TokenKind::BangEqual => {
+                self.emit_bytes(chunk::OpCode::Equal.u8(), chunk::OpCode::Not.u8())
+            }
+            TokenKind::EqualEqual => self.emit_byte(chunk::OpCode::Equal.u8()),
+            TokenKind::Greater => self.emit_byte(chunk::OpCode::Greater.u8()),
+            TokenKind::GreaterEqual => {
+                self.emit_bytes(chunk::OpCode::Less.u8(), chunk::OpCode::Not.u8())
+            }
+            TokenKind::Less => self.emit_byte(chunk::OpCode::Less.u8()),
+            TokenKind::LessEqual => {
+                self.emit_bytes(chunk::OpCode::Greater.u8(), chunk::OpCode::Not.u8())
+            }
+            TokenKind::Plus => self.emit_byte(chunk::OpCode::Add.u8()),
+            TokenKind::Minus => self.emit_byte(chunk::OpCode::Subtract.u8()),
+            TokenKind::Star => self.emit_byte(chunk::OpCode::Multiply.u8()),
+            TokenKind::Slash => self.emit_byte(chunk::OpCode::Divide.u8()),
+            _ => return Err(anyhow::anyhow!("Internal compiler error")), // Unreachable.
+        }
+        Ok(())
+    }
+
+    fn literal(&mut self) -> Result<()> {
+        match self.previous.kind {
+            scanner::TokenKind::False => self.emit_byte(chunk::OpCode::False.u8()),
+            scanner::TokenKind::Nil => self.emit_byte(chunk::OpCode::Nil.u8()),
+            scanner::TokenKind::True => self.emit_byte(chunk::OpCode::True.u8()),
             _ => return Err(anyhow::anyhow!("Internal compiler error")), // Unreachable.
         }
         Ok(())
