@@ -1,7 +1,7 @@
 use crate::chunk;
 use crate::scanner;
 use crate::scanner::TokenKind;
-use crate::value::Value;
+use crate::value::*;
 
 use anyhow::Result;
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -180,7 +180,7 @@ impl<'a> Compiler<'a> {
                 precedence: Precedence::None,
             },
             TokenKind::String => ParseRule {
-                prefix: None,
+                prefix: Some(Compiler::string),
                 infix: None,
                 precedence: Precedence::None,
             },
@@ -456,6 +456,14 @@ impl<'a> Compiler<'a> {
             scanner::TokenKind::True => self.emit_byte(chunk::OpCode::True.u8()),
             _ => return Err(anyhow::anyhow!("Internal compiler error")), // Unreachable.
         }
+        Ok(())
+    }
+
+    fn string(&mut self) -> Result<()> {
+        let str_obj = Value::Obj(Obj::String(
+            self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string(),
+        ));
+        self.emit_constant(str_obj);
         Ok(())
     }
 }

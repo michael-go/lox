@@ -115,7 +115,22 @@ impl VM {
                     self.binary_op_compare(|a, b| a < b)?;
                 }
                 Some(OpCode::Add) => {
-                    self.binary_op_num(|a, b| a + b)?;
+                    let b = self.pop();
+                    let a = self.pop();
+                    match (a, b) {
+                        (Value::Number(a), Value::Number(b)) => self.push(Value::Number(a + b)),
+                        (Value::Obj(Obj::String(a)), Value::Obj(Obj::String(b))) => {
+                            let new_str = a + &b;
+                            self.push(Value::Obj(Obj::String(new_str)))
+                        }
+                        _ => {
+                            return Err(LoxError::new(
+                                LoxErrorKind::RuntimeError,
+                                "Operands must be two numbers or two strings.".to_string(),
+                            )
+                            .into())
+                        }
+                    }
                 }
                 Some(OpCode::Subtract) => {
                     self.binary_op_num(|a, b| a - b)?;
@@ -166,7 +181,8 @@ impl VM {
 
     fn read_constant(&mut self) -> Value {
         let constant_index = self.read_byte();
-        self.chunk.constants[constant_index as usize]
+        // TODO: try to avoid the clone
+        self.chunk.constants[constant_index as usize].clone()
     }
 
     fn push(&mut self, value: Value) {
@@ -181,8 +197,10 @@ impl VM {
         self.stack.clear();
     }
 
+    // TODO: it's unused
     fn peek(&self, distance: usize) -> Value {
-        self.stack[self.stack.len() - 1 - distance]
+        // TODO: try to avoid the clone
+        self.stack[self.stack.len() - 1 - distance].clone()
     }
 
     fn binary_op_num(&mut self, op: fn(f64, f64) -> f64) -> Result<()> {
@@ -272,5 +290,33 @@ mod tests {
         let res = vm.interpret("1 + true");
         // TODO: try to downcast to LoxError
         assert_eq!(res.is_err(), true);
+    }
+
+    #[test]
+    fn compare_strings() {
+        let mut vm = VM::new(Options::default());
+        let res = vm.interpret("\"abc\" == \"abc\"").unwrap();
+        if let Value::Bool(b) = res {
+            assert!(b);
+        } else {
+            panic!("Expected number");
+        }
+        let res = vm.interpret("\"abc\" == \"abd\"").unwrap();
+        if let Value::Bool(b) = res {
+            assert!(!b);
+        } else {
+            panic!("Expected number");
+        }
+    }
+
+    #[test]
+    fn string_concat() {
+        let mut vm = VM::new(Options::default());
+        let res = vm.interpret("\"foo\" + \"bar\" + \"baz\"").unwrap();
+        if let Value::Obj(Obj::String(s)) = res {
+            assert_eq!(s, "foobarbaz");
+        } else {
+            panic!("Expected string");
+        }
     }
 }
