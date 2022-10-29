@@ -197,12 +197,6 @@ impl VM {
         self.stack.clear();
     }
 
-    // TODO: it's unused
-    fn peek(&self, distance: usize) -> Value {
-        // TODO: try to avoid the clone
-        self.stack[self.stack.len() - 1 - distance].clone()
-    }
-
     fn binary_op_num(&mut self, op: fn(f64, f64) -> f64) -> Result<()> {
         let b = self.pop();
         let a = self.pop();
