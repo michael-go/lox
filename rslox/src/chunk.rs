@@ -18,6 +18,7 @@ pub enum OpCode {
     Divide,
     Negate,
     Not,
+    Print,
     Return,
 }
 
@@ -88,6 +89,7 @@ impl Chunk {
             Some(OpCode::Divide) => self.dissasemble_simple_instruction("Divide", offset),
             Some(OpCode::Negate) => self.dissasemble_simple_instruction("Negate", offset),
             Some(OpCode::Not) => self.dissasemble_simple_instruction("Not", offset),
+            Some(OpCode::Print) => self.dissasemble_simple_instruction("Print", offset),
             Some(OpCode::Return) => self.dissasemble_simple_instruction("Return", offset),
             None => {
                 println!("Unknown opcode {}", instruction);

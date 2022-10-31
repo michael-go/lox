@@ -71,7 +71,10 @@ impl<'a> Compiler<'a> {
         }
 
         self.advance()?;
-        self.expression()?;
+
+        while !self.match_token(TokenKind::Eof)? {
+            self.declaration()?;
+        }
 
         self.end();
         Ok(())
@@ -464,6 +467,37 @@ impl<'a> Compiler<'a> {
             self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string(),
         ));
         self.emit_constant(str_obj);
+        Ok(())
+    }
+
+    fn declaration(&mut self) -> Result<()> {
+        self.statement()
+    }
+
+    fn statement(&mut self) -> Result<()> {
+        if self.match_token(TokenKind::Print)? {
+            return self.print_statement();
+        } else {
+            return Err(anyhow::anyhow!("Unexpected expression"));
+        }
+    }
+
+    fn match_token(&mut self, kind: scanner::TokenKind) -> Result<bool> {
+        if !self.check(kind) {
+            return Ok(false);
+        }
+        self.advance()?;
+        Ok(true)
+    }
+
+    fn check(&self, kind: scanner::TokenKind) -> bool {
+        self.current.kind == kind
+    }
+
+    fn print_statement(&mut self) -> Result<()> {
+        self.expression()?;
+        self.consume(scanner::TokenKind::Semicolon, "Expect ';' after value.")?;
+        self.emit_byte(chunk::OpCode::Print.u8());
         Ok(())
     }
 }

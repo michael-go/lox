@@ -40,23 +40,24 @@ fn run_file(path: &str, options: vm::Options) -> Result<()> {
     let mut vm = vm::VM::new(options);
 
     let source = std::fs::read_to_string(path)?;
-    let _ = vm.interpret(&source);
-    Ok(())
+    vm.interpret(&source)
 }
 
-fn main() -> Result<()> {
-    std::env::set_var("RUST_BACKTRACE", "full");
-
+fn main() {
     let args = Args::parse();
 
     let options = vm::Options {
         trace_execution: args.trace_execution,
     };
 
-    // TODO: handle errors
+    let res: Result<()>;
     if let Some(lox_file) = args.lox_file {
-        run_file(&lox_file, options)
+        res = run_file(&lox_file, options)
     } else {
-        repl(options)
+        res = repl(options)
+    }
+
+    if res.is_err() {
+        std::process::exit(65);
     }
 }

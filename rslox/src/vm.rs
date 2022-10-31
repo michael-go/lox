@@ -50,8 +50,11 @@ impl std::fmt::Display for LoxError {
 impl std::error::Error for LoxError {}
 
 impl LoxError {
-    pub fn new(kind: LoxErrorKind, message: String) -> LoxError {
-        LoxError { kind, message }
+    pub fn new(kind: LoxErrorKind, message: &str) -> LoxError {
+        LoxError {
+            kind,
+            message: message.to_string(),
+        }
     }
 }
 
@@ -72,7 +75,7 @@ impl VM {
         self.stack.clear();
     }
 
-    pub fn interpret(&mut self, source: &str) -> Result<Value> {
+    pub fn interpret(&mut self, source: &str) -> Result<()> {
         let mut chunk = Chunk::new();
         compiler::Compiler::new(source, &mut chunk).compile()?;
         if self.options.trace_execution {
@@ -82,7 +85,7 @@ impl VM {
         self.run()
     }
 
-    fn run(&mut self) -> Result<Value> {
+    fn run(&mut self) -> Result<()> {
         loop {
             if self.options.trace_execution {
                 println!("          ");
@@ -124,11 +127,9 @@ impl VM {
                             self.push(Value::Obj(Obj::String(new_str)))
                         }
                         _ => {
-                            return Err(LoxError::new(
-                                LoxErrorKind::RuntimeError,
-                                "Operands must be two numbers or two strings.".to_string(),
-                            )
-                            .into())
+                            return Err(self
+                                .runtime_error("Operands must be two numbers or two strings.")
+                                .into());
                         }
                     }
                 }
@@ -156,18 +157,15 @@ impl VM {
                         _ => self.push(Value::Bool(false)),
                     }
                 }
-                Some(OpCode::Return) => {
+                Some(OpCode::Print) => {
                     let value = self.pop();
                     println!("{}", value);
-                    return Ok(value);
+                }
+                Some(OpCode::Return) => {
+                    return Ok(());
                 }
                 None => {
-                    println!("Unknown opcode {}", instruction);
-                    return Err(LoxError::new(
-                        LoxErrorKind::RuntimeError,
-                        "Unknown opcode".to_string(),
-                    )
-                    .into());
+                    return Err(self.runtime_error("Unknown opcode.").into());
                 }
             }
         }
@@ -230,87 +228,6 @@ impl VM {
         eprintln!("[line {}] in script", line);
         self.reset_stack();
 
-        return LoxError::new(LoxErrorKind::RuntimeError, message.to_string()).into();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn arithmetic() {
-        let mut vm = VM::new(Options::default());
-        let res = vm.interpret("3 * (1 + 2)").unwrap();
-        if let Value::Number(n) = res {
-            assert_eq!(n, 9.0);
-        } else {
-            panic!("Expected number");
-        }
-    }
-
-    #[test]
-    fn compare() {
-        let mut vm = VM::new(Options::default());
-        let res = vm.interpret("!(5 - 4 > 3 * 2 == !nil)").unwrap();
-        if let Value::Bool(b) = res {
-            assert_eq!(b, true);
-        } else {
-            panic!("Expected bool");
-        }
-    }
-
-    #[test]
-    fn unicode_comment() {
-        let mut vm = VM::new(Options::default());
-        let res = vm
-            .interpret(
-                "
-        // סבבה
-        1 / 2
-        ",
-            )
-            .unwrap();
-        if let Value::Number(n) = res {
-            assert_eq!(n, 0.5);
-        } else {
-            panic!("Expected number");
-        }
-    }
-
-    #[test]
-    fn runtime_error() {
-        let mut vm = VM::new(Options::default());
-        let res = vm.interpret("1 + true");
-        // TODO: try to downcast to LoxError
-        assert_eq!(res.is_err(), true);
-    }
-
-    #[test]
-    fn compare_strings() {
-        let mut vm = VM::new(Options::default());
-        let res = vm.interpret("\"abc\" == \"abc\"").unwrap();
-        if let Value::Bool(b) = res {
-            assert!(b);
-        } else {
-            panic!("Expected number");
-        }
-        let res = vm.interpret("\"abc\" == \"abd\"").unwrap();
-        if let Value::Bool(b) = res {
-            assert!(!b);
-        } else {
-            panic!("Expected number");
-        }
-    }
-
-    #[test]
-    fn string_concat() {
-        let mut vm = VM::new(Options::default());
-        let res = vm.interpret("\"foo\" + \"bar\" + \"baz\"").unwrap();
-        if let Value::Obj(Obj::String(s)) = res {
-            assert_eq!(s, "foobarbaz");
-        } else {
-            panic!("Expected string");
-        }
+        return LoxError::new(LoxErrorKind::RuntimeError, message).into();
     }
 }

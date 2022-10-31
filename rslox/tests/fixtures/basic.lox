@@ -1,0 +1,7 @@
+print 3 * (1 + 2);
+print 3 * 1 + 2;
+print 5 - 4 > 3 * 2 == !nil;
+print !(5 - 4 > 3 * 2 == !nil);
+print "abc" == "a" + "bc";
+print "abc" == "a" + "bd";
+print "foo" + "bar"+"baz";
