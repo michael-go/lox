@@ -7,6 +7,7 @@ use test_case::test_case;
 // - https://crates.io/crates/test-generator
 #[test_case("basic")]
 #[test_case("unicode")]
+#[test_case("error-synchornize")]
 fn test_fixture(fname: &str) -> Result<()> {
     let lox_path = format!("tests/fixtures/{}.lox", fname);
 

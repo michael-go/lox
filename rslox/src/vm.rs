@@ -106,6 +106,9 @@ impl VM {
                 Some(OpCode::Nil) => self.push(Value::Nil),
                 Some(OpCode::True) => self.push(Value::Bool(true)),
                 Some(OpCode::False) => self.push(Value::Bool(false)),
+                Some(OpCode::Pop) => {
+                    self.pop();
+                }
                 Some(OpCode::Equal) => {
                     let b = self.pop();
                     let a = self.pop();

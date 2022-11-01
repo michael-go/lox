@@ -471,14 +471,18 @@ impl<'a> Compiler<'a> {
     }
 
     fn declaration(&mut self) -> Result<()> {
-        self.statement()
+        let res = self.statement();
+        if res.is_err() {
+            self.synchronize()?;
+        }
+        Ok(())
     }
 
     fn statement(&mut self) -> Result<()> {
         if self.match_token(TokenKind::Print)? {
             return self.print_statement();
         } else {
-            return Err(anyhow::anyhow!("Unexpected expression"));
+            return self.expresstion_statement();
         }
     }
 
@@ -498,6 +502,37 @@ impl<'a> Compiler<'a> {
         self.expression()?;
         self.consume(scanner::TokenKind::Semicolon, "Expect ';' after value.")?;
         self.emit_byte(chunk::OpCode::Print.u8());
+        Ok(())
+    }
+
+    fn expresstion_statement(&mut self) -> Result<()> {
+        self.expression()?;
+        self.consume(scanner::TokenKind::Semicolon, "Expect ';' after value.")?;
+        self.emit_byte(chunk::OpCode::Pop.u8());
+        Ok(())
+    }
+
+    fn synchronize(&mut self) -> Result<()> {
+        while self.current.kind != scanner::TokenKind::Eof {
+            if self.previous.kind == scanner::TokenKind::Semicolon {
+                return Ok(());
+            }
+
+            match self.current.kind {
+                scanner::TokenKind::Class
+                | scanner::TokenKind::Fun
+                | scanner::TokenKind::Var
+                | scanner::TokenKind::For
+                | scanner::TokenKind::If
+                | scanner::TokenKind::While
+                | scanner::TokenKind::Print
+                | scanner::TokenKind::Return => return Ok(()),
+                _ => {}
+            }
+
+            self.advance()?
+        }
+        
         Ok(())
     }
 }
