@@ -73,7 +73,10 @@ impl<'a> Compiler<'a> {
         self.advance()?;
 
         while !self.match_token(TokenKind::Eof)? {
-            self.declaration()?;
+            let res = self.declaration();
+            if res.is_err() {
+                self.synchronize()?;
+            }
         }
 
         self.end();
@@ -178,7 +181,7 @@ impl<'a> Compiler<'a> {
                 precedence: Precedence::Comparison,
             },
             TokenKind::Identifier => ParseRule {
-                prefix: None,
+                prefix: Some(Compiler::variable),
                 infix: None,
                 precedence: Precedence::None,
             },
@@ -471,9 +474,10 @@ impl<'a> Compiler<'a> {
     }
 
     fn declaration(&mut self) -> Result<()> {
-        let res = self.statement();
-        if res.is_err() {
-            self.synchronize()?;
+        if self.match_token(scanner::TokenKind::Var)? {
+            self.var_declaration()?;
+        } else {
+            self.statement()?;
         }
         Ok(())
     }
@@ -532,7 +536,50 @@ impl<'a> Compiler<'a> {
 
             self.advance()?
         }
-        
+
+        Ok(())
+    }
+
+    fn var_declaration(&mut self) -> Result<()> {
+        let global = self.parse_variable("Expect variable name.")?;
+
+        if self.match_token(scanner::TokenKind::Equal)? {
+            self.expression()?;
+        } else {
+            self.emit_byte(chunk::OpCode::Nil.u8());
+        }
+        self.consume(
+            scanner::TokenKind::Semicolon,
+            "Expect ';' after variable declaration.",
+        )?;
+
+        self.define_variable(global);
+        Ok(())
+    }
+
+    fn parse_variable(&mut self, error_message: &str) -> Result<u8> {
+        self.consume(scanner::TokenKind::Identifier, error_message)?;
+
+        self.identifier_constant(self.previous.lexeme.clone())
+    }
+
+    fn identifier_constant(&mut self, name: String) -> Result<u8> {
+        let str_obj = Value::Obj(Obj::String(name));
+        Ok(self.make_constant(str_obj))
+    }
+
+    fn define_variable(&mut self, global: u8) {
+        self.emit_bytes(chunk::OpCode::DefineGlobal.u8(), global);
+    }
+
+    fn variable(&mut self) -> Result<()> {
+        self.named_variable(self.previous.lexeme.clone())?;
+        Ok(())
+    }
+
+    fn named_variable(&mut self, name: String) -> Result<()> {
+        let arg = self.identifier_constant(name)?;
+        self.emit_bytes(chunk::OpCode::GetGlobal.u8(), arg);
         Ok(())
     }
 }

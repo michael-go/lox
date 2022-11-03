@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Formatter;
 
 use num_traits::FromPrimitive;
@@ -21,10 +22,11 @@ impl Default for Options {
 }
 
 pub struct VM {
+    options: Options,
     chunk: Chunk,
     ip: usize,
     stack: Vec<Value>,
-    options: Options,
+    globals: HashMap<String, Value>,
 }
 
 // TODO: move to common module, add CompilerError
@@ -61,11 +63,12 @@ impl LoxError {
 impl VM {
     pub fn new(options: Options) -> VM {
         VM {
+            options: options,
             chunk: Chunk::new(),
             ip: 0,
             // TODO: reserve space for the stack, maybe have STACK_MAX
             stack: Vec::new(),
-            options: options,
+            globals: HashMap::new(),
         }
     }
 
@@ -108,6 +111,29 @@ impl VM {
                 Some(OpCode::False) => self.push(Value::Bool(false)),
                 Some(OpCode::Pop) => {
                     self.pop();
+                }
+                Some(OpCode::GetGlobal) => {
+                    let name_obj = self.read_constant();
+                    if let Value::Obj(Obj::String(name)) = name_obj {
+                        let value = self.globals.get(&name).unwrap_or(&Value::Nil);
+                        self.push(value.clone());
+                    } else {
+                        return Err(self
+                            .runtime_error("internal error: expected variable name")
+                            .into());
+                    }
+                }
+                Some(OpCode::DefineGlobal) => {
+                    let name = self.read_constant();
+                    if let Value::Obj(Obj::String(name)) = name {
+                        let val = self.peek(0);
+                        self.globals.insert(name, val);
+                        self.pop();
+                    } else {
+                        return Err(self
+                            .runtime_error("internal error: expected variable name")
+                            .into());
+                    }
                 }
                 Some(OpCode::Equal) => {
                     let b = self.pop();
@@ -192,6 +218,10 @@ impl VM {
 
     fn pop(&mut self) -> Value {
         self.stack.pop().unwrap()
+    }
+
+    fn peek(&self, distance: usize) -> Value {
+        self.stack[self.stack.len() - 1 - distance].clone()
     }
 
     fn reset_stack(&mut self) {
