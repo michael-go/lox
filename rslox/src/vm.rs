@@ -135,6 +135,24 @@ impl VM {
                             .into());
                     }
                 }
+                Some(OpCode::SetGlobal) => {
+                    let name = self.read_constant();
+                    if let Value::Obj(Obj::String(name)) = name {
+                        let val = self.peek(0);
+
+                        if self.globals.contains_key(&name) {
+                            self.globals.insert(name, val);
+                        } else {
+                            return Err(self
+                                .runtime_error(&format!("Undefined variable {}", name))
+                                .into());
+                        }
+                    } else {
+                        return Err(self
+                            .runtime_error("internal error: expected variable name")
+                            .into());
+                    }
+                }
                 Some(OpCode::Equal) => {
                     let b = self.pop();
                     let a = self.pop();

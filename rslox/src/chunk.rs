@@ -12,6 +12,7 @@ pub enum OpCode {
     Pop,
     GetGlobal,
     DefineGlobal,
+    SetGlobal,
     Equal,
     Greater,
     Less,
@@ -88,6 +89,7 @@ impl Chunk {
             Some(OpCode::DefineGlobal) => {
                 self.dissasemble_constant_instruction("DefineGlobal", offset)
             }
+            Some(OpCode::SetGlobal) => self.dissasemble_constant_instruction("SetGlobal", offset),
             Some(OpCode::Equal) => self.dissasemble_simple_instruction("Equal", offset),
             Some(OpCode::Greater) => self.dissasemble_simple_instruction("Greater", offset),
             Some(OpCode::Less) => self.dissasemble_simple_instruction("Less", offset),

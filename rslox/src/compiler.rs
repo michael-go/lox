@@ -32,7 +32,7 @@ impl Precedence {
 }
 
 struct ParseRule<'a> {
-    prefix: Option<fn(&mut Compiler<'a>) -> Result<()>>,
+    prefix: Option<fn(&mut Compiler<'a>, can_assign: bool) -> Result<()>>,
     infix: Option<fn(&mut Compiler<'a>) -> Result<()>>,
     precedence: Precedence,
 }
@@ -291,9 +291,11 @@ impl<'a> Compiler<'a> {
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<()> {
         self.advance()?;
 
+        let can_assign = precedence.to_u8() <= Precedence::Assignment.to_u8();
+
         let prefix_rule = Self::get_rule(self.previous.kind).prefix;
         match prefix_rule {
-            Some(prefix_rule) => prefix_rule(self)?,
+            Some(prefix_rule) => prefix_rule(self, can_assign)?,
             None => {
                 return self.error("Expect expression.");
             }
@@ -309,6 +311,11 @@ impl<'a> Compiler<'a> {
                 }
             }
         }
+
+        if can_assign && self.match_token(TokenKind::Equal)? {
+            return self.error("Invalid assignment target");
+        }
+
         Ok(())
     }
 
@@ -383,7 +390,7 @@ impl<'a> Compiler<'a> {
         self.emit_byte(chunk::OpCode::Return.u8());
     }
 
-    fn number(&mut self) -> Result<()> {
+    fn number(&mut self, _can_assign: bool) -> Result<()> {
         let value = self.previous.lexeme.parse::<f64>().unwrap();
         self.emit_constant(Value::Number(value));
         Ok(())
@@ -405,7 +412,7 @@ impl<'a> Compiler<'a> {
         constant
     }
 
-    fn grouping(&mut self) -> Result<()> {
+    fn grouping(&mut self, _can_assign: bool) -> Result<()> {
         self.expression()?;
         self.consume(
             scanner::TokenKind::RightParen,
@@ -414,7 +421,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn unary(&mut self) -> Result<()> {
+    fn unary(&mut self, _can_assign: bool) -> Result<()> {
         let operator_type = self.previous.kind.clone();
 
         // Compile the operand.
@@ -455,7 +462,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn literal(&mut self) -> Result<()> {
+    fn literal(&mut self, _can_assign: bool) -> Result<()> {
         match self.previous.kind {
             scanner::TokenKind::False => self.emit_byte(chunk::OpCode::False.u8()),
             scanner::TokenKind::Nil => self.emit_byte(chunk::OpCode::Nil.u8()),
@@ -465,7 +472,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn string(&mut self) -> Result<()> {
+    fn string(&mut self, _can_assign: bool) -> Result<()> {
         let str_obj = Value::Obj(Obj::String(
             self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string(),
         ));
@@ -572,14 +579,21 @@ impl<'a> Compiler<'a> {
         self.emit_bytes(chunk::OpCode::DefineGlobal.u8(), global);
     }
 
-    fn variable(&mut self) -> Result<()> {
-        self.named_variable(self.previous.lexeme.clone())?;
+    fn variable(&mut self, can_assign: bool) -> Result<()> {
+        self.named_variable(self.previous.lexeme.clone(), can_assign)?;
         Ok(())
     }
 
-    fn named_variable(&mut self, name: String) -> Result<()> {
+    fn named_variable(&mut self, name: String, can_assign: bool) -> Result<()> {
         let arg = self.identifier_constant(name)?;
-        self.emit_bytes(chunk::OpCode::GetGlobal.u8(), arg);
+
+        if can_assign && self.match_token(scanner::TokenKind::Equal)? {
+            self.expression()?;
+            self.emit_bytes(chunk::OpCode::SetGlobal.u8(), arg);
+        } else {
+            self.emit_bytes(chunk::OpCode::GetGlobal.u8(), arg);
+        }
+
         Ok(())
     }
 }
