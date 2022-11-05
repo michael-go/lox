@@ -13,7 +13,6 @@ use test_case::test_case;
 fn test_fixture(fname: &str) -> Result<()> {
     let lox_path = format!("tests/fixtures/{}.lox", fname);
 
-    // TODO: need to make sure binary up-to-date before running the tests
     let output = std::process::Command::new("target/debug/rslox")
         .args([lox_path])
         .output()?;

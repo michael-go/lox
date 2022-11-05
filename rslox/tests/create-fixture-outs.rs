@@ -1,6 +1,6 @@
 use std::io::Write;
 
-// meant to be run with `cargo script`
+// meant to be run with `make gen-fixture-outs`
 
 fn main() {
     for entry in std::fs::read_dir("tests/fixtures").unwrap() {
