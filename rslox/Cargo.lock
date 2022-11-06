@@ -129,6 +129,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22030e2c5a68ec659fde1e949a745124b48e6fa8b045b7ed5bd1fe4ccc5c4e5d"
 
 [[package]]
+name = "glob"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
+
+[[package]]
 name = "heck"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -292,6 +298,7 @@ dependencies = [
  "num-traits",
  "regex",
  "test-case",
+ "test-generator",
 ]
 
 [[package]]
@@ -357,6 +364,18 @@ dependencies = [
  "proc-macro2 1.0.47",
  "quote 1.0.21",
  "syn 1.0.103",
+]
+
+[[package]]
+name = "test-generator"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea97be90349ab3574f6e74d1566e1c5dd3a4bc74b89f4af4cc10ca010af103c0"
+dependencies = [
+ "glob",
+ "proc-macro2 0.4.30",
+ "quote 0.6.13",
+ "syn 0.15.44",
 ]
 
 [[package]]
