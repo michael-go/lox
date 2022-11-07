@@ -392,24 +392,17 @@ impl<'a> Compiler<'a> {
 
     fn number(&mut self, _can_assign: bool) -> Result<()> {
         let value = self.previous.lexeme.parse::<f64>().unwrap();
-        self.emit_constant(Value::Number(value));
+        self.emit_constant(Value::Number(value))
+    }
+
+    fn emit_constant(&mut self, value: Value) -> Result<()> {
+        let constant = self.make_constant(value)?;
+        self.emit_bytes(chunk::OpCode::Constant.u8(), constant);
         Ok(())
     }
 
-    fn emit_constant(&mut self, value: Value) {
-        let constant = self.make_constant(value);
-        self.emit_bytes(chunk::OpCode::Constant.u8(), constant);
-    }
-
-    fn make_constant(&mut self, value: Value) -> u8 {
-        let constant = self.current_chunk().add_constant(value);
-        // TODO: ensure we don't allow more than u8::MAX constants
-        //if constant > u8::MAX {
-        //    self.error_at_current("Too many constants in one chunk.");
-        //    return 0;
-        //}
-
-        constant
+    fn make_constant(&mut self, value: Value) -> Result<u8> {
+        self.current_chunk().add_constant(value)
     }
 
     fn grouping(&mut self, _can_assign: bool) -> Result<()> {
@@ -476,8 +469,7 @@ impl<'a> Compiler<'a> {
         let str_obj = Value::Obj(Obj::String(
             self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string(),
         ));
-        self.emit_constant(str_obj);
-        Ok(())
+        self.emit_constant(str_obj)
     }
 
     fn declaration(&mut self) -> Result<()> {
@@ -572,7 +564,7 @@ impl<'a> Compiler<'a> {
 
     fn identifier_constant(&mut self, name: String) -> Result<u8> {
         let str_obj = Value::Obj(Obj::String(name));
-        Ok(self.make_constant(str_obj))
+        self.make_constant(str_obj)
     }
 
     fn define_variable(&mut self, global: u8) {
