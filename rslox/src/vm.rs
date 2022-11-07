@@ -216,6 +216,16 @@ impl VM {
                     let value = self.pop();
                     println!("{}", value);
                 }
+                Some(OpCode::Jump) => {
+                    let offset = self.read_short();
+                    self.ip += offset as usize;
+                }
+                Some(OpCode::JumpIfFalse) => {
+                    let offset = self.read_short();
+                    if Self::is_falsey(self.peek(0)) {
+                        self.ip += offset as usize;
+                    }
+                }
                 Some(OpCode::Return) => {
                     return Ok(());
                 }
@@ -288,5 +298,18 @@ impl VM {
         self.reset_stack();
 
         return LoxError::new(LoxErrorKind::RuntimeError, message).into();
+    }
+
+    fn is_falsey(val: Value) -> bool {
+        match val {
+            Value::Nil => true,
+            Value::Bool(false) => true,
+            _ => false,
+        }
+    }
+
+    fn read_short(&mut self) -> u16 {
+        let offset = (self.read_byte() as u16) << 8;
+        offset | self.read_byte() as u16
     }
 }

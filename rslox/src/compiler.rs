@@ -496,6 +496,8 @@ impl<'a> Compiler<'a> {
     fn statement(&mut self) -> Result<()> {
         if self.match_token(TokenKind::Print)? {
             self.print_statement()
+        } else if self.match_token(TokenKind::If)? {
+            self.if_statement()
         } else if self.match_token(TokenKind::LeftBrace)? {
             self.begin_scope();
             self.block()?;
@@ -698,5 +700,45 @@ impl<'a> Compiler<'a> {
         }
 
         self.locals.last_mut().unwrap().depth = self.scope_depth;
+    }
+
+    fn if_statement(&mut self) -> Result<()> {
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'if'.")?;
+        self.expression()?;
+        self.consume(TokenKind::RightParen, "Expect ')' after condition.")?;
+
+        let then_jump = self.emit_jump(chunk::OpCode::JumpIfFalse);
+        self.emit_byte(chunk::OpCode::Pop.u8());
+        self.statement()?;
+
+        let else_jump = self.emit_jump(chunk::OpCode::Jump);
+        self.patch_jump(then_jump)?;
+        self.emit_byte(chunk::OpCode::Pop.u8());
+
+        if self.match_token(TokenKind::Else)? {
+            self.statement()?;
+        }
+
+        self.patch_jump(else_jump)
+    }
+
+    fn emit_jump(&mut self, instruction: chunk::OpCode) -> usize {
+        self.emit_byte(instruction.u8());
+        self.emit_byte(0xff);
+        self.emit_byte(0xff);
+        self.current_chunk().code.len() - 2
+    }
+
+    fn patch_jump(&mut self, offset: usize) -> Result<()> {
+        let jump = self.current_chunk().code.len() - offset - 2;
+
+        if jump > u16::MAX as usize {
+            return self.error("Too much code to jump over.");
+        }
+
+        self.current_chunk().code[offset] = ((jump >> 8) & 0xff) as u8;
+        self.current_chunk().code[offset + 1] = (jump & 0xff) as u8;
+
+        Ok(())
     }
 }

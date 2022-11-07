@@ -1,0 +1,11 @@
+if (true) {
+    print "yes";
+} else {
+    print "no";
+}
+
+if (false) {
+    print "bad";
+} else {
+    print "good";
+}

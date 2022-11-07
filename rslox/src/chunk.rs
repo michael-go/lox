@@ -26,6 +26,8 @@ pub enum OpCode {
     Negate,
     Not,
     Print,
+    Jump,
+    JumpIfFalse,
     Return,
 }
 
@@ -108,6 +110,10 @@ impl Chunk {
             Some(OpCode::Negate) => self.dissasemble_simple_instruction("Negate", offset),
             Some(OpCode::Not) => self.dissasemble_simple_instruction("Not", offset),
             Some(OpCode::Print) => self.dissasemble_simple_instruction("Print", offset),
+            Some(OpCode::Jump) => self.dissasemble_jump_instruction("Jump", 1, offset),
+            Some(OpCode::JumpIfFalse) => {
+                self.dissasemble_jump_instruction("JumpIfFalse", 1, offset)
+            }
             Some(OpCode::Return) => self.dissasemble_simple_instruction("Return", offset),
             None => {
                 println!("Unknown opcode {}", instruction);
@@ -128,9 +134,21 @@ impl Chunk {
         offset + 2
     }
 
-    fn dissasemble_byte_instruction(&self, arg: &str, offset: usize) -> usize {
+    fn dissasemble_byte_instruction(&self, name: &str, offset: usize) -> usize {
         let byte = self.code[offset + 1];
-        println!("{:16} {:4}", arg, byte);
+        println!("{:16} {:4}", name, byte);
         offset + 2
+    }
+
+    fn dissasemble_jump_instruction(&self, name: &str, sign: i32, offset: usize) -> usize {
+        let mut jump = (self.code[offset + 1] as u16) << 8;
+        jump |= self.code[offset + 2] as u16;
+        println!(
+            "{:16} {:4} -> {}\n",
+            name,
+            offset,
+            offset + 3 + (sign * (jump as i32)) as usize
+        );
+        offset + 3
     }
 }
