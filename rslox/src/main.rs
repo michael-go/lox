@@ -39,8 +39,13 @@ fn repl(options: vm::Options) -> Result<()> {
 fn run_file(path: &str, options: vm::Options) -> Result<()> {
     let mut vm = vm::VM::new(options);
 
-    let source = std::fs::read_to_string(path)?;
-    vm.interpret(&source)
+    match std::fs::read_to_string(path) {
+        Ok(source) => vm.interpret(&source),
+        Err(e) => {
+            println!("Error reading file {}: {}", path, e);
+            Err(e.into())
+        }
+    }
 }
 
 fn main() {
