@@ -1,0 +1,16 @@
+var g1 = "foo";
+
+{
+    var l1 = g1 + "bar";
+    print l1;
+    
+    {
+        var l1 = "shadowed";
+        print l1;
+    }
+}
+
+print g1;
+// TODO: is it ok these print nil rather than error?
+print l1;
+print no_such_var;

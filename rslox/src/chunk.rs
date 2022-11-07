@@ -11,6 +11,8 @@ pub enum OpCode {
     True,
     False,
     Pop,
+    GetLocal,
+    SetLocal,
     GetGlobal,
     DefineGlobal,
     SetGlobal,
@@ -89,6 +91,8 @@ impl Chunk {
             Some(OpCode::True) => self.dissasemble_simple_instruction("True", offset),
             Some(OpCode::False) => self.dissasemble_simple_instruction("False", offset),
             Some(OpCode::Pop) => self.dissasemble_simple_instruction("Pop", offset),
+            Some(OpCode::GetLocal) => self.dissasemble_byte_instruction("GetLocal", offset),
+            Some(OpCode::SetLocal) => self.dissasemble_byte_instruction("SetLocal", offset),
             Some(OpCode::GetGlobal) => self.dissasemble_constant_instruction("GetGlobal", offset),
             Some(OpCode::DefineGlobal) => {
                 self.dissasemble_constant_instruction("DefineGlobal", offset)
@@ -121,6 +125,12 @@ impl Chunk {
         let constant = self.code[offset + 1];
         print!("{:16} {:4} '", arg, constant);
         println!("{}", self.constants.get(constant as usize).unwrap());
+        offset + 2
+    }
+
+    fn dissasemble_byte_instruction(&self, arg: &str, offset: usize) -> usize {
+        let byte = self.code[offset + 1];
+        println!("{:16} {:4}", arg, byte);
         offset + 2
     }
 }

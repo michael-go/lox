@@ -1,0 +1,10 @@
+# exit code: 0
+# stdout:
+"foobar"
+"shadowed"
+"foo"
+nil
+nil
+
+# stderr:
+

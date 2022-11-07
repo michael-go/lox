@@ -112,6 +112,14 @@ impl VM {
                 Some(OpCode::Pop) => {
                     self.pop();
                 }
+                Some(OpCode::GetLocal) => {
+                    let slot = self.read_byte();
+                    self.push(self.stack[slot as usize].clone());
+                }
+                Some(OpCode::SetLocal) => {
+                    let slot = self.read_byte();
+                    self.stack[slot as usize] = self.peek(0).clone();
+                }
                 Some(OpCode::GetGlobal) => {
                     let name_obj = self.read_constant();
                     if let Value::Obj(Obj::String(name)) = name_obj {
