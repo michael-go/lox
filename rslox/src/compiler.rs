@@ -498,6 +498,8 @@ impl<'a> Compiler<'a> {
             self.print_statement()
         } else if self.match_token(TokenKind::If)? {
             self.if_statement()
+        } else if self.match_token(TokenKind::While)? {
+            self.while_statement()
         } else if self.match_token(TokenKind::LeftBrace)? {
             self.begin_scope();
             self.block()?;
@@ -760,5 +762,39 @@ impl<'a> Compiler<'a> {
 
         self.parse_precedence(Precedence::Or)?;
         self.patch_jump(end_jump)
+    }
+
+    fn while_statement(&mut self) -> Result<()> {
+        let loop_start = self.current_chunk().code.len() - 1;
+
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'while'.")?;
+        self.expression()?;
+        self.consume(TokenKind::RightParen, "Expect ')' after condition.")?;
+
+        let exit_jump = self.emit_jump(chunk::OpCode::JumpIfFalse);
+
+        self.emit_byte(chunk::OpCode::Pop.u8());
+        self.statement()?;
+
+        self.emit_loop(loop_start)?;
+
+        self.patch_jump(exit_jump)?;
+        self.emit_byte(chunk::OpCode::Pop.u8());
+
+        Ok(())
+    }
+
+    fn emit_loop(&mut self, loop_start: usize) -> Result<()> {
+        let offset = self.current_chunk().code.len() - loop_start + 2;
+
+        if offset > u16::MAX as usize {
+            return self.error("Loop body too large.");
+        }
+
+        self.emit_byte(chunk::OpCode::Loop.u8());
+        self.emit_byte(((offset >> 8) & 0xff) as u8);
+        self.emit_byte((offset & 0xff) as u8);
+
+        Ok(())
     }
 }

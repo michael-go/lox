@@ -1,0 +1,15 @@
+# exit code: 0
+# stdout:
+"looper"
+0
+"looper"
+1
+"looper"
+2
+"looper"
+3
+"looper"
+4
+
+# stderr:
+

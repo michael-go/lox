@@ -28,6 +28,7 @@ pub enum OpCode {
     Print,
     Jump,
     JumpIfFalse,
+    Loop,
     Return,
 }
 
@@ -114,6 +115,7 @@ impl Chunk {
             Some(OpCode::JumpIfFalse) => {
                 self.dissasemble_jump_instruction("JumpIfFalse", 1, offset)
             }
+            Some(OpCode::Loop) => self.dissasemble_jump_instruction("Loop", -1, offset),
             Some(OpCode::Return) => self.dissasemble_simple_instruction("Return", offset),
             None => {
                 println!("Unknown opcode {}", instruction);
@@ -147,7 +149,7 @@ impl Chunk {
             "{:16} {:4} -> {}\n",
             name,
             offset,
-            offset + 3 + (sign * (jump as i32)) as usize
+            offset as i32 + 3 + (sign * (jump as i32))
         );
         offset + 3
     }
