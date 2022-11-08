@@ -1,0 +1,6 @@
+print 1 == 2;
+print 1 == 1;
+print (true and false);
+print true or false;
+print 1 > 2 or 2 > 2 or 3 > 2;
+print 1 < 2 and 1 == 2;

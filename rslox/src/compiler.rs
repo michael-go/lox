@@ -209,8 +209,8 @@ impl<'a> Compiler<'a> {
             },
             TokenKind::And => ParseRule {
                 prefix: None,
-                infix: None,
-                precedence: Precedence::None,
+                infix: Some(Compiler::and),
+                precedence: Precedence::And,
             },
             TokenKind::Class => ParseRule {
                 prefix: None,
@@ -249,8 +249,8 @@ impl<'a> Compiler<'a> {
             },
             TokenKind::Or => ParseRule {
                 prefix: None,
-                infix: None,
-                precedence: Precedence::None,
+                infix: Some(Compiler::or),
+                precedence: Precedence::Or,
             },
             TokenKind::Print => ParseRule {
                 prefix: None,
@@ -740,5 +740,25 @@ impl<'a> Compiler<'a> {
         self.current_chunk().code[offset + 1] = (jump & 0xff) as u8;
 
         Ok(())
+    }
+
+    fn and(&mut self) -> Result<()> {
+        let end_jump = self.emit_jump(chunk::OpCode::JumpIfFalse);
+
+        self.emit_byte(chunk::OpCode::Pop.u8());
+        self.parse_precedence(Precedence::And)?;
+
+        self.patch_jump(end_jump)
+    }
+
+    fn or(&mut self) -> Result<()> {
+        let else_jump = self.emit_jump(chunk::OpCode::JumpIfFalse);
+        let end_jump = self.emit_jump(chunk::OpCode::Jump);
+
+        self.patch_jump(else_jump)?;
+        self.emit_byte(chunk::OpCode::Pop.u8());
+
+        self.parse_precedence(Precedence::Or)?;
+        self.patch_jump(end_jump)
     }
 }

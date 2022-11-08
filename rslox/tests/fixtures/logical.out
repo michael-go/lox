@@ -1,0 +1,11 @@
+# exit code: 0
+# stdout:
+false
+true
+false
+true
+true
+false
+
+# stderr:
+
