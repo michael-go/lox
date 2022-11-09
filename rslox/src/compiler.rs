@@ -42,17 +42,30 @@ struct Local {
     depth: i32,
 }
 
-// TODO: maybe split to Parser & Compiler
+struct CompilationUnit<'a> {
+    pub chunk: &'a mut chunk::Chunk,
+    pub locals: Vec<Local>,
+    pub scope_depth: i32,
+}
+
+impl<'a> CompilationUnit<'a> {
+    pub fn new(chunk: &'a mut chunk::Chunk) -> CompilationUnit<'a> {
+        CompilationUnit {
+            chunk,
+            locals: Vec::new(),
+            scope_depth: 0,
+        }
+    }
+}
+
 pub struct Compiler<'a> {
-    scanner: scanner::Scanner,
-    chunk: &'a mut chunk::Chunk,
-    current: scanner::Token,
-    previous: scanner::Token,
     ran: bool,
 
-    // TODO: these are defined in a separate "Compiler" struct in the book
-    locals: Vec<Local>,
-    scope_depth: i32,
+    scanner: scanner::Scanner,
+    current: scanner::Token,
+    previous: scanner::Token,
+
+    comp_unit: CompilationUnit<'a>,
 }
 
 impl<'a> Compiler<'a> {
@@ -66,14 +79,13 @@ impl<'a> Compiler<'a> {
             line: 0,
         };
         Compiler {
-            scanner,
-            chunk,
-            current: EOF.clone(),
-            previous: EOF.clone(),
             ran: false,
 
-            locals: Vec::with_capacity((u8::MAX as usize) + 1),
-            scope_depth: 0,
+            scanner,
+            current: EOF.clone(),
+            previous: EOF.clone(),
+
+            comp_unit: CompilationUnit::new(chunk),
         }
     }
 
@@ -381,7 +393,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn current_chunk(&mut self) -> &mut chunk::Chunk {
-        &mut self.chunk
+        &mut self.comp_unit.chunk
     }
 
     fn emit_byte(&mut self, byte: u8) {
@@ -582,7 +594,7 @@ impl<'a> Compiler<'a> {
         self.consume(scanner::TokenKind::Identifier, error_message)?;
 
         self.declare_variable()?;
-        if self.scope_depth > 0 {
+        if self.comp_unit.scope_depth > 0 {
             return Ok(0);
         }
 
@@ -595,7 +607,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn define_variable(&mut self, global: u8) {
-        if self.scope_depth > 0 {
+        if self.comp_unit.scope_depth > 0 {
             self.mark_initialized();
             return;
         }
@@ -604,12 +616,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn declare_variable(&mut self) -> Result<()> {
-        if self.scope_depth == 0 {
+        if self.comp_unit.scope_depth == 0 {
             return Ok(());
         }
 
-        for local in self.locals.iter().rev() {
-            if local.depth >= 0 && local.depth < self.scope_depth {
+        for local in self.comp_unit.locals.iter().rev() {
+            if local.depth >= 0 && local.depth < self.comp_unit.scope_depth {
                 break;
             }
 
@@ -653,11 +665,11 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_local(&mut self, name: scanner::Token) -> Result<()> {
-        if self.locals.len() == u8::MAX as usize {
+        if self.comp_unit.locals.len() == u8::MAX as usize {
             return self.error("Too many local variables in function.");
         }
 
-        self.locals.push(Local { name, depth: -1 });
+        self.comp_unit.locals.push(Local { name, depth: -1 });
         Ok(())
     }
 
@@ -670,23 +682,25 @@ impl<'a> Compiler<'a> {
     }
 
     fn begin_scope(&mut self) {
-        self.scope_depth += 1;
+        self.comp_unit.scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
-        self.scope_depth -= 1;
+        self.comp_unit.scope_depth -= 1;
 
-        while self.locals.len() > 0 && self.locals.last().unwrap().depth > self.scope_depth {
+        while self.comp_unit.locals.len() > 0
+            && self.comp_unit.locals.last().unwrap().depth > self.comp_unit.scope_depth
+        {
             self.emit_byte(chunk::OpCode::Pop.u8());
-            self.locals.pop();
+            self.comp_unit.locals.pop();
         }
     }
 
     fn resolve_local(&self, name: &str) -> Result<Option<u8>> {
         // TODO: can assert that locals.len() < u8::MAX
-        for i in (0..self.locals.len()).rev() {
-            if self.locals[i].name.lexeme == name {
-                if self.locals[i].depth == -1 {
+        for i in (0..self.comp_unit.locals.len()).rev() {
+            if self.comp_unit.locals[i].name.lexeme == name {
+                if self.comp_unit.locals[i].depth == -1 {
                     return self
                         .error("Can't read local variable in its own initializer.")
                         .map(|_| None);
@@ -699,11 +713,11 @@ impl<'a> Compiler<'a> {
     }
 
     fn mark_initialized(&mut self) {
-        if self.scope_depth == 0 {
+        if self.comp_unit.scope_depth == 0 {
             return;
         }
 
-        self.locals.last_mut().unwrap().depth = self.scope_depth;
+        self.comp_unit.locals.last_mut().unwrap().depth = self.comp_unit.scope_depth;
     }
 
     fn if_statement(&mut self) -> Result<()> {
