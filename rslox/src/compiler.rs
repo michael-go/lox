@@ -498,6 +498,8 @@ impl<'a> Compiler<'a> {
             self.print_statement()
         } else if self.match_token(TokenKind::If)? {
             self.if_statement()
+        } else if self.match_token(TokenKind::For)? {
+            self.for_statement()
         } else if self.match_token(TokenKind::While)? {
             self.while_statement()
         } else if self.match_token(TokenKind::LeftBrace)? {
@@ -505,7 +507,7 @@ impl<'a> Compiler<'a> {
             self.block()?;
             Ok(self.end_scope())
         } else {
-            self.expresstion_statement()
+            self.expression_statement()
         }
     }
 
@@ -528,7 +530,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn expresstion_statement(&mut self) -> Result<()> {
+    fn expression_statement(&mut self) -> Result<()> {
         self.expression()?;
         self.consume(scanner::TokenKind::Semicolon, "Expect ';' after value.")?;
         self.emit_byte(chunk::OpCode::Pop.u8());
@@ -795,6 +797,56 @@ impl<'a> Compiler<'a> {
         self.emit_byte(((offset >> 8) & 0xff) as u8);
         self.emit_byte((offset & 0xff) as u8);
 
+        Ok(())
+    }
+
+    fn for_statement(&mut self) -> Result<()> {
+        self.begin_scope();
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'for'.")?;
+
+        // Initializer:
+        if self.match_token(TokenKind::Semicolon)? {
+            // No initializer.
+        } else if self.match_token(TokenKind::Var)? {
+            self.var_declaration()?;
+        } else {
+            self.expression_statement()?;
+        }
+
+        // Condition:
+        let mut loop_start = self.current_chunk().code.len() - 1;
+        let mut exit_jump: Option<usize> = None;
+        if !self.match_token(TokenKind::Semicolon)? {
+            self.expression()?;
+            self.consume(TokenKind::Semicolon, "Expect ';'.")?;
+
+            // Jump out of the loop if the condition is false.
+            exit_jump = Some(self.emit_jump(chunk::OpCode::JumpIfFalse));
+            self.emit_byte(chunk::OpCode::Pop.u8());
+        }
+
+        // Increment:
+        if !self.match_token(TokenKind::RightParen)? {
+            let body_jump = self.emit_jump(chunk::OpCode::Jump);
+            let increment_start = self.current_chunk().code.len() - 1;
+            self.expression()?;
+            self.emit_byte(chunk::OpCode::Pop.u8());
+            self.consume(TokenKind::RightParen, "Expect ')' after for clauses.")?;
+            self.emit_loop(loop_start)?;
+            loop_start = increment_start;
+            self.patch_jump(body_jump)?;
+        }
+
+        // Body:
+        self.statement()?;
+
+        self.emit_loop(loop_start)?;
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(exit_jump)?;
+            self.emit_byte(chunk::OpCode::Pop.u8()); // Condition.
+        }
+
+        self.end_scope();
         Ok(())
     }
 }

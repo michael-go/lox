@@ -1,6 +1,17 @@
 var i = 0;
-while (i < 5) {
-    print "looper";
+while (i < 4) {
+    print "while looper";
     print i;
     i = i + 1;
+}
+
+for (; i > 0;) {
+    print "naked for looper";
+    print i;
+    i = i - 1;
+}
+
+for (var j = 0; j <= 2; j = j + 1) {
+    print "for looper";
+    print j;
 }

@@ -1,15 +1,27 @@
 # exit code: 0
 # stdout:
-"looper"
+"while looper"
 0
-"looper"
+"while looper"
 1
-"looper"
+"while looper"
 2
-"looper"
+"while looper"
 3
-"looper"
+"naked for looper"
 4
+"naked for looper"
+3
+"naked for looper"
+2
+"naked for looper"
+1
+"for looper"
+0
+"for looper"
+1
+"for looper"
+2
 
 # stderr:
 
