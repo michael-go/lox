@@ -6,3 +6,6 @@ gen-fixture-outs: build
 	
 test:
 	cargo test
+
+fmt:
+	cargo fmt

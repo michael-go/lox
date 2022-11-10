@@ -7,6 +7,7 @@ use anyhow::Result;
 
 use crate::chunk::*;
 use crate::compiler;
+use crate::object::*;
 use crate::value::*;
 
 pub struct Options {
@@ -21,12 +22,10 @@ impl Default for Options {
     }
 }
 
-pub struct VM {
-    options: Options,
-    chunk: Chunk,
+struct CallFrame {
+    function: Function,
     ip: usize,
-    stack: Vec<Value>,
-    globals: HashMap<String, Value>,
+    slots_base: usize,
 }
 
 // TODO: move to common module, add CompilerError
@@ -60,31 +59,55 @@ impl LoxError {
     }
 }
 
+pub struct VM {
+    options: Options,
+
+    // TODO: in clox these are allocated on the stack. consider https://crates.io/crates/arrayvec
+    frames: Vec<CallFrame>,
+    stack: Vec<Value>,
+
+    globals: HashMap<String, Value>,
+}
+
 impl VM {
     pub fn new(options: Options) -> VM {
         VM {
             options: options,
-            chunk: Chunk::new(),
-            ip: 0,
+            // TODO: reserve space for the stack, maybe have FRAMES_MAX
+            frames: Vec::new(),
             // TODO: reserve space for the stack, maybe have STACK_MAX
             stack: Vec::new(),
             globals: HashMap::new(),
         }
     }
 
-    fn init(&mut self, chunk: Chunk) {
-        self.chunk = chunk;
-        self.ip = 0;
+    fn init(&mut self) {
         self.stack.clear();
+        self.frames.clear();
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let mut chunk = Chunk::new();
-        compiler::Compiler::new(source, &mut chunk).compile()?;
+        // TODO: braindump: `globals`'s lifetime is tied to the lifetime of the VM,
+        //   but the `stack` and `frames` are tied only to the lifetime of the `interpret` function.
+        //   some of the Values in the stack/frames can reference globals (including function objects) from previous runs.
+        // ... so maybe the globals should be the owners of the objects and the stack/frames should store references to them?
+
+        let mut compiler = compiler::Compiler::new(source, compiler::FunctionType::Script);
+        let function = compiler.compile()?;
         if self.options.trace_execution {
-            chunk.dissasemble("code");
+            function.chunk.dissasemble("code");
         }
-        self.init(chunk);
+
+        self.init();
+        self.push(Value::Obj(Obj::Function(function.clone())));
+
+        let frame = CallFrame {
+            function: function.clone(),
+            ip: 0,
+            slots_base: 0,
+        };
+        self.frames.push(frame);
+
         self.run()
     }
 
@@ -97,7 +120,12 @@ impl VM {
                 }
                 println!("");
 
-                self.chunk.disassemble_instruction(self.ip);
+                self.frames
+                    .last()
+                    .unwrap()
+                    .function
+                    .chunk
+                    .disassemble_instruction(self.frames.last().unwrap().ip);
             }
 
             let instruction = self.read_byte();
@@ -114,11 +142,14 @@ impl VM {
                 }
                 Some(OpCode::GetLocal) => {
                     let slot = self.read_byte();
-                    self.push(self.stack[slot as usize].clone());
+                    self.push(
+                        self.stack[self.frames.last().unwrap().slots_base + slot as usize].clone(),
+                    )
                 }
                 Some(OpCode::SetLocal) => {
                     let slot = self.read_byte();
-                    self.stack[slot as usize] = self.peek(0).clone();
+                    self.stack[self.frames.last().unwrap().slots_base + slot as usize] =
+                        self.peek(0).clone();
                 }
                 Some(OpCode::GetGlobal) => {
                     let name_obj = self.read_constant();
@@ -218,17 +249,17 @@ impl VM {
                 }
                 Some(OpCode::Jump) => {
                     let offset = self.read_short();
-                    self.ip += offset as usize;
+                    self.frames.last_mut().unwrap().ip += offset as usize;
                 }
                 Some(OpCode::JumpIfFalse) => {
                     let offset = self.read_short();
                     if Self::is_falsey(self.peek(0)) {
-                        self.ip += offset as usize;
+                        self.frames.last_mut().unwrap().ip += offset as usize;
                     }
                 }
                 Some(OpCode::Loop) => {
                     let offset = self.read_short();
-                    self.ip -= offset as usize;
+                    self.frames.last_mut().unwrap().ip -= offset as usize;
                 }
                 Some(OpCode::Return) => {
                     return Ok(());
@@ -240,16 +271,20 @@ impl VM {
         }
     }
 
+    fn current_frame(&self) -> &CallFrame {
+        self.frames.last().unwrap()
+    }
+
     fn read_byte(&mut self) -> u8 {
-        let byte = self.chunk.code[self.ip];
-        self.ip += 1;
+        let byte = self.current_frame().function.chunk.code[self.current_frame().ip];
+        self.frames.last_mut().unwrap().ip += 1;
         byte
     }
 
     fn read_constant(&mut self) -> Value {
         let constant_index = self.read_byte();
         // TODO: try to avoid the clone
-        self.chunk.constants[constant_index as usize].clone()
+        self.current_frame().function.chunk.constants[constant_index as usize].clone()
     }
 
     fn push(&mut self, value: Value) {
@@ -297,7 +332,7 @@ impl VM {
     fn runtime_error(&mut self, message: &str) -> LoxError {
         eprintln!("Runtime error: {}", message);
 
-        let line = self.chunk.lines[&(self.ip - 1)];
+        let line = self.current_frame().function.chunk.lines[&(self.current_frame().ip - 1)];
         eprintln!("[line {}] in script", line);
         self.reset_stack();
 

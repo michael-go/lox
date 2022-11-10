@@ -1,15 +1,4 @@
-#[derive(Clone, PartialEq)]
-pub enum Obj {
-    String(String),
-}
-
-impl std::fmt::Display for Obj {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Obj::String(s) => write!(f, "\"{}\"", s),
-        }
-    }
-}
+use crate::object::Obj;
 
 #[derive(Clone, PartialEq)]
 pub enum Value {
@@ -19,7 +8,7 @@ pub enum Value {
     Obj(Obj),
 }
 
-impl std::fmt::Display for Value {
+impl<'a> std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Bool(b) => write!(f, "{}", b),

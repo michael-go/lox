@@ -1,5 +1,6 @@
 mod chunk;
 mod compiler;
+mod object;
 mod scanner;
 mod value;
 mod vm;
@@ -14,7 +15,7 @@ use std::io::{self, Write};
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(short, long)]
-    disassemble: bool,
+    disassemble: bool, // TODO: forgot to handle this
     #[arg(short, long)]
     trace_execution: bool,
 

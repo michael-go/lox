@@ -1,4 +1,5 @@
 use crate::chunk;
+use crate::object::*;
 use crate::scanner;
 use crate::scanner::TokenKind;
 use crate::value::*;
@@ -31,9 +32,9 @@ impl Precedence {
     }
 }
 
-struct ParseRule<'a> {
-    prefix: Option<fn(&mut Compiler<'a>, can_assign: bool) -> Result<()>>,
-    infix: Option<fn(&mut Compiler<'a>) -> Result<()>>,
+struct ParseRule {
+    prefix: Option<fn(&mut Compiler, can_assign: bool) -> Result<()>>,
+    infix: Option<fn(&mut Compiler) -> Result<()>>,
     precedence: Precedence,
 }
 
@@ -42,42 +43,58 @@ struct Local {
     depth: i32,
 }
 
-struct CompilationUnit<'a> {
-    pub chunk: &'a mut chunk::Chunk,
-    pub locals: Vec<Local>,
-    pub scope_depth: i32,
+pub enum FunctionType {
+    Function,
+    Script,
 }
 
-impl<'a> CompilationUnit<'a> {
-    pub fn new(chunk: &'a mut chunk::Chunk) -> CompilationUnit<'a> {
+struct CompilationUnit {
+    pub locals: Vec<Local>,
+    pub scope_depth: i32,
+    pub function_type: FunctionType,
+    pub function: Function,
+}
+
+impl<'a> CompilationUnit {
+    pub fn new(function_type: FunctionType) -> CompilationUnit {
         CompilationUnit {
-            chunk,
             locals: Vec::new(),
             scope_depth: 0,
+            function_type,
+            function: Function::new(),
         }
     }
 }
 
-pub struct Compiler<'a> {
+pub struct Compiler {
     ran: bool,
 
     scanner: scanner::Scanner,
     current: scanner::Token,
     previous: scanner::Token,
 
-    comp_unit: CompilationUnit<'a>,
+    comp_unit: CompilationUnit,
 }
 
-impl<'a> Compiler<'a> {
+impl Compiler {
     // TODO: bah ... don't really want a constructor here, just did it to avoid global var
     //  another alternative is to have a function with a closure as context
-    pub fn new(source: &str, chunk: &'a mut chunk::Chunk) -> Compiler<'a> {
+    pub fn new(source: &str, function_type: FunctionType) -> Compiler {
         let scanner = scanner::Scanner::new(source);
         static EOF: scanner::Token = scanner::Token {
             kind: TokenKind::Eof,
             lexeme: String::new(),
             line: 0,
         };
+        let mut locals = Vec::<Local>::with_capacity((u8::MAX as usize) + 1);
+        locals.push(Local {
+            name: scanner::Token {
+                kind: TokenKind::Eof,
+                lexeme: String::new(),
+                line: 0,
+            },
+            depth: 0,
+        });
         Compiler {
             ran: false,
 
@@ -85,29 +102,38 @@ impl<'a> Compiler<'a> {
             current: EOF.clone(),
             previous: EOF.clone(),
 
-            comp_unit: CompilationUnit::new(chunk),
+            comp_unit: CompilationUnit::new(function_type),
         }
     }
 
-    pub fn compile(&mut self) -> Result<()> {
+    pub fn compile(&mut self) -> Result<Function> {
         if self.ran {
             return Err(anyhow::anyhow!("Compiler can only be used once"));
         }
+        self.ran = true;
+
+        let mut had_error = false;
 
         self.advance()?;
 
         while !self.match_token(TokenKind::Eof)? {
             let res = self.declaration();
             if res.is_err() {
+                had_error = true;
                 self.synchronize()?;
             }
         }
 
         self.end();
-        Ok(())
+
+        if had_error {
+            // TODO: return error (need to update some tests, so do in next commit)
+        }
+        // TODO: try to avoid the clone
+        Ok(self.comp_unit.function.clone())
     }
 
-    fn get_rule(kind: TokenKind) -> ParseRule<'a> {
+    fn get_rule(kind: TokenKind) -> ParseRule {
         match kind {
             TokenKind::LeftParen => ParseRule {
                 prefix: Some(Compiler::grouping),
@@ -393,7 +419,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn current_chunk(&mut self) -> &mut chunk::Chunk {
-        &mut self.comp_unit.chunk
+        &mut self.comp_unit.function.chunk
     }
 
     fn emit_byte(&mut self, byte: u8) {
