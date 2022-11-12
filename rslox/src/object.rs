@@ -18,11 +18,18 @@ impl<'a> std::fmt::Display for Function {
 }
 
 impl<'a> Function {
-    pub fn new() -> Function {
+    pub fn new(name: Option<String>) -> Function {
+        let func_name: String;
+        if let Some(name) = name {
+            func_name = name;
+        } else {
+            func_name = String::new();
+        }
+
         Function {
             arity: 0,
             chunk: Chunk::new(),
-            name: String::new(),
+            name: func_name,
         }
     }
 }

@@ -38,17 +38,22 @@ struct ParseRule {
     precedence: Precedence,
 }
 
+#[derive(Clone)]
 struct Local {
     name: scanner::Token,
     depth: i32,
 }
 
+#[derive(Clone)]
 pub enum FunctionType {
     Function,
     Script,
 }
 
+#[derive(Clone)]
 struct CompilationUnit {
+    pub enclosing: Option<Box<CompilationUnit>>, // TODO: in clox it's a pointer to the stack, no heap allocation
+
     pub locals: Vec<Local>,
     pub scope_depth: i32,
     pub function_type: FunctionType,
@@ -56,12 +61,27 @@ struct CompilationUnit {
 }
 
 impl<'a> CompilationUnit {
-    pub fn new(function_type: FunctionType) -> CompilationUnit {
+    pub fn new(
+        function_type: FunctionType,
+        name: Option<String>,
+        enclosing: Option<Box<CompilationUnit>>,
+    ) -> CompilationUnit {
+        let mut locals = Vec::<Local>::with_capacity((u8::MAX as usize) + 1);
+        locals.push(Local {
+            name: scanner::Token {
+                kind: TokenKind::Eof,
+                lexeme: String::new(),
+                line: 0,
+            },
+            depth: 0,
+        });
+        let function = Function::new(name);
         CompilationUnit {
-            locals: Vec::new(),
+            enclosing,
+            locals,
             scope_depth: 0,
             function_type,
-            function: Function::new(),
+            function,
         }
     }
 }
@@ -73,6 +93,7 @@ pub struct Compiler {
     current: scanner::Token,
     previous: scanner::Token,
 
+    // TODO: this might need be a pointer
     comp_unit: CompilationUnit,
 }
 
@@ -86,15 +107,6 @@ impl Compiler {
             lexeme: String::new(),
             line: 0,
         };
-        let mut locals = Vec::<Local>::with_capacity((u8::MAX as usize) + 1);
-        locals.push(Local {
-            name: scanner::Token {
-                kind: TokenKind::Eof,
-                lexeme: String::new(),
-                line: 0,
-            },
-            depth: 0,
-        });
         Compiler {
             ran: false,
 
@@ -102,7 +114,7 @@ impl Compiler {
             current: EOF.clone(),
             previous: EOF.clone(),
 
-            comp_unit: CompilationUnit::new(function_type),
+            comp_unit: CompilationUnit::new(function_type, None, None),
         }
     }
 
@@ -124,13 +136,11 @@ impl Compiler {
             }
         }
 
-        self.end();
-
         if had_error {
             // TODO: return error (need to update some tests, so do in next commit)
         }
         // TODO: try to avoid the clone
-        Ok(self.comp_unit.function.clone())
+        Ok(self.end_comp_unit())
     }
 
     fn get_rule(kind: TokenKind) -> ParseRule {
@@ -432,8 +442,17 @@ impl Compiler {
         self.emit_byte(byte2);
     }
 
-    fn end(&mut self) {
+    fn end_comp_unit(&mut self) -> Function {
         self.emit_return();
+
+        let func = self.comp_unit.function.clone();
+
+        // TODO: this is hacky, temporaryly doing it to avoid defining comp_unit as Option
+        if self.comp_unit.enclosing.is_some() {
+            self.comp_unit = *self.comp_unit.enclosing.take().unwrap();
+        }
+
+        return func;
     }
 
     fn emit_return(&mut self) {
@@ -523,12 +542,13 @@ impl Compiler {
     }
 
     fn declaration(&mut self) -> Result<()> {
-        if self.match_token(scanner::TokenKind::Var)? {
-            self.var_declaration()?;
+        if self.match_token(TokenKind::Fun)? {
+            self.fun_declaration()
+        } else if self.match_token(TokenKind::Var)? {
+            self.var_declaration()
         } else {
-            self.statement()?;
+            self.statement()
         }
-        Ok(())
     }
 
     fn statement(&mut self) -> Result<()> {
@@ -742,7 +762,6 @@ impl Compiler {
         if self.comp_unit.scope_depth == 0 {
             return;
         }
-
         self.comp_unit.locals.last_mut().unwrap().depth = self.comp_unit.scope_depth;
     }
 
@@ -887,6 +906,52 @@ impl Compiler {
         }
 
         self.end_scope();
+        Ok(())
+    }
+
+    fn fun_declaration(&mut self) -> Result<()> {
+        let global = self.parse_variable("Expect function name.")?;
+        self.mark_initialized();
+        self.function(FunctionType::Function)?;
+        self.define_variable(global);
+        Ok(())
+    }
+
+    fn function(&mut self, function_type: FunctionType) -> Result<()> {
+        let name = self.previous.lexeme.clone();
+        let comp_unit = CompilationUnit::new(
+            function_type,
+            Some(name),
+            Some(Box::new(self.comp_unit.clone())),
+        );
+        self.comp_unit = comp_unit;
+
+        self.begin_scope();
+
+        self.consume(TokenKind::LeftParen, "Expect '(' after function name.")?;
+        if !self.check(TokenKind::RightParen) {
+            loop {
+                self.comp_unit.function.arity += 1;
+                if self.comp_unit.function.arity > 255 {
+                    return self.error_at_current("Cannot have more than 255 parameters.");
+                }
+
+                let constant = self.parse_variable("Expect parameter name.")?;
+                self.define_variable(constant);
+
+                if !self.match_token(TokenKind::Comma)? {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenKind::RightParen, "Expect ')' after function name.")?;
+        self.consume(TokenKind::LeftBrace, "Expect '{' before function body.")?;
+        self.block()?;
+
+        let func = self.end_comp_unit();
+        let constant = self.make_constant(Value::Obj(Obj::Function(func)))?;
+        self.emit_bytes(chunk::OpCode::Constant.u8(), constant);
+
         Ok(())
     }
 }
