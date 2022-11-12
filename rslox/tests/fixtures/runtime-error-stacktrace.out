@@ -1,0 +1,10 @@
+# exit code: 65
+# stdout:
+
+# stderr:
+Runtime error: Expected 0 arguments but got 2.
+[line 4] in <fn c>
+[line 2] in <fn b>
+[line 1] in <fn a>
+[line 7] in <script>
+

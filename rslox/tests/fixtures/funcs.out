@@ -1,6 +1,7 @@
 # exit code: 0
 # stdout:
 <fn areWeHavingItYet>
+"Yes we are! woohoo"
 
 # stderr:
 

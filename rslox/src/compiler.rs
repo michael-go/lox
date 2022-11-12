@@ -147,8 +147,8 @@ impl Compiler {
         match kind {
             TokenKind::LeftParen => ParseRule {
                 prefix: Some(Compiler::grouping),
-                infix: None,
-                precedence: Precedence::None,
+                infix: Some(Compiler::call),
+                precedence: Precedence::Call,
             },
             TokenKind::RightParen => ParseRule {
                 prefix: None,
@@ -953,5 +953,31 @@ impl Compiler {
         self.emit_bytes(chunk::OpCode::Constant.u8(), constant);
 
         Ok(())
+    }
+
+    fn call(&mut self) -> Result<()> {
+        let arg_count = self.argument_list()?;
+        self.emit_bytes(chunk::OpCode::Call.u8(), arg_count);
+        Ok(())
+    }
+
+    fn argument_list(&mut self) -> Result<u8> {
+        let mut arg_count = 0;
+        if !self.check(TokenKind::RightParen) {
+            loop {
+                self.expression()?;
+                if arg_count == 255 {
+                    return self
+                        .error_at_current("Cannot have more than 255 arguments.")
+                        .map(|_| 0);
+                }
+                arg_count += 1;
+                if !self.match_token(TokenKind::Comma)? {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenKind::RightParen, "Expect ')' after arguments.")?;
+        Ok(arg_count)
     }
 }

@@ -5,5 +5,5 @@
 # stderr:
 [line 8] Error at '=': Invalid assignment target
 Runtime error: Undefined variable no_such_var
-[line 6] in script
+[line 6] in <script>
 

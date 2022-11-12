@@ -1,5 +1,7 @@
-fun areWeHavingItYet() {
-  print "Yes we are!";
+fun areWeHavingItYet(suffix) {
+  print "Yes we are! " + suffix;
 }
 
 print areWeHavingItYet;
+
+areWeHavingItYet("woohoo");

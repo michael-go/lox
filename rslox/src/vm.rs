@@ -99,14 +99,9 @@ impl VM {
         }
 
         self.init();
-        self.push(Value::Obj(Obj::Function(function.clone())));
 
-        let frame = CallFrame {
-            function: function.clone(),
-            ip: 0,
-            slots_base: 0,
-        };
-        self.frames.push(frame);
+        self.push(Value::Obj(Obj::Function(function.clone())));
+        self.call(function, 0)?;
 
         self.run()
     }
@@ -261,6 +256,10 @@ impl VM {
                     let offset = self.read_short();
                     self.frames.last_mut().unwrap().ip -= offset as usize;
                 }
+                Some(OpCode::Call) => {
+                    let arg_count = self.read_byte();
+                    self.call_value(self.peek(arg_count as usize), arg_count)?;
+                }
                 Some(OpCode::Return) => {
                     return Ok(());
                 }
@@ -332,8 +331,11 @@ impl VM {
     fn runtime_error(&mut self, message: &str) -> LoxError {
         eprintln!("Runtime error: {}", message);
 
-        let line = self.current_frame().function.chunk.lines[&(self.current_frame().ip - 1)];
-        eprintln!("[line {}] in script", line);
+        for frame in self.frames.iter().rev() {
+            let line = frame.function.chunk.lines[&(frame.ip - 1)];
+            eprintln!("[line {}] in {}", line, frame.function);
+        }
+
         self.reset_stack();
 
         return LoxError::new(LoxErrorKind::RuntimeError, message).into();
@@ -350,5 +352,40 @@ impl VM {
     fn read_short(&mut self) -> u16 {
         let offset = (self.read_byte() as u16) << 8;
         offset | self.read_byte() as u16
+    }
+
+    fn call_value(&mut self, callee: Value, arg_count: u8) -> Result<()> {
+        match callee {
+            Value::Obj(Obj::Function(function)) => {
+                if arg_count as usize != function.arity {
+                    return Err(self
+                        .runtime_error(&format!(
+                            "Expected {} arguments but got {}.",
+                            function.arity, arg_count
+                        ))
+                        .into());
+                }
+                self.call(function, arg_count)
+            }
+            _ => {
+                return Err(self
+                    .runtime_error("Can only call functions and classes.")
+                    .into())
+            }
+        }
+    }
+
+    fn call(&mut self, function: Function, arg_count: u8) -> Result<()> {
+        if self.frames.len() > u8::MAX as usize {
+            return Err(self.runtime_error("Stack overflow.").into());
+        }
+
+        let frame = CallFrame {
+            function,
+            ip: 0,
+            slots_base: self.stack.len() - arg_count as usize - 1,
+        };
+        self.frames.push(frame);
+        Ok(())
     }
 }
