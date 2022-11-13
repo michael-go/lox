@@ -84,6 +84,8 @@ impl VM {
     fn init(&mut self) {
         self.stack.clear();
         self.frames.clear();
+
+        self.define_native("clock", Self::clock_native);
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
@@ -375,6 +377,14 @@ impl VM {
                 }
                 self.call(function, arg_count)
             }
+            Value::Obj(Obj::NativeFunction(native)) => {
+                let args = &self.stack[self.stack.len() - arg_count as usize..];
+                let result = (native.function)(args);
+                self.stack
+                    .truncate(self.stack.len() - arg_count as usize - 1);
+                self.push(result);
+                Ok(())
+            }
             _ => {
                 return Err(self
                     .runtime_error("Can only call functions and classes.")
@@ -395,5 +405,19 @@ impl VM {
         };
         self.frames.push(frame);
         Ok(())
+    }
+
+    fn define_native(&mut self, name: &str, function: fn(&[Value]) -> Value) {
+        // TODO: in the book key & value pushed/popped to the stack to protect from GC
+        self.globals.insert(
+            name.to_string(),
+            Value::Obj(Obj::NativeFunction(NativeFunction::new(function))),
+        );
+    }
+
+    fn clock_native(_args: &[Value]) -> Value {
+        let now = std::time::SystemTime::now();
+        let since_the_epoch = now.duration_since(std::time::UNIX_EPOCH).unwrap();
+        Value::Number(since_the_epoch.as_secs_f64())
     }
 }

@@ -1,4 +1,5 @@
 use crate::chunk::Chunk;
+use crate::value::Value;
 
 #[derive(Clone, PartialEq)]
 pub struct Function {
@@ -34,10 +35,34 @@ impl<'a> Function {
     }
 }
 
+#[derive(Clone)]
+pub struct NativeFunction {
+    pub function: fn(&[Value]) -> Value,
+}
+
+impl std::fmt::Display for NativeFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<native fn>")
+    }
+}
+
+impl PartialEq for NativeFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.function as usize == other.function as usize
+    }
+}
+
+impl NativeFunction {
+    pub fn new(function: fn(&[Value]) -> Value) -> NativeFunction {
+        NativeFunction { function }
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub enum Obj {
     String(String),
     Function(Function),
+    NativeFunction(NativeFunction),
 }
 
 impl<'a> std::fmt::Display for Obj {
@@ -45,6 +70,7 @@ impl<'a> std::fmt::Display for Obj {
         match self {
             Obj::String(s) => write!(fmt, "\"{}\"", s),
             Obj::Function(f) => write!(fmt, "{}", f),
+            Obj::NativeFunction(f) => write!(fmt, "{}", f),
         }
     }
 }
