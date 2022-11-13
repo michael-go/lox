@@ -456,6 +456,7 @@ impl Compiler {
     }
 
     fn emit_return(&mut self) {
+        self.emit_byte(chunk::OpCode::Nil.u8());
         self.emit_byte(chunk::OpCode::Return.u8());
     }
 
@@ -558,6 +559,8 @@ impl Compiler {
             self.if_statement()
         } else if self.match_token(TokenKind::For)? {
             self.for_statement()
+        } else if self.match_token(TokenKind::Return)? {
+            self.return_statement()
         } else if self.match_token(TokenKind::While)? {
             self.while_statement()
         } else if self.match_token(TokenKind::LeftBrace)? {
@@ -979,5 +982,20 @@ impl Compiler {
         }
         self.consume(TokenKind::RightParen, "Expect ')' after arguments.")?;
         Ok(arg_count)
+    }
+
+    fn return_statement(&mut self) -> Result<()> {
+        if let FunctionType::Script = self.comp_unit.function_type {
+            return self.error("Cannot return from top-level code.");
+        }
+
+        if self.match_token(TokenKind::Semicolon)? {
+            self.emit_return();
+        } else {
+            self.expression()?;
+            self.consume(TokenKind::Semicolon, "Expect ';' after return value.")?;
+            self.emit_byte(chunk::OpCode::Return.u8());
+        }
+        Ok(())
     }
 }

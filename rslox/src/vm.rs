@@ -261,7 +261,15 @@ impl VM {
                     self.call_value(self.peek(arg_count as usize), arg_count)?;
                 }
                 Some(OpCode::Return) => {
-                    return Ok(());
+                    let result = self.pop();
+                    let current_frame_base = self.frames.last().unwrap().slots_base;
+                    self.frames.pop();
+                    if self.frames.is_empty() {
+                        return Ok(());
+                    }
+
+                    self.stack.truncate(current_frame_base);
+                    self.push(result);
                 }
                 None => {
                     return Err(self.runtime_error("Unknown opcode.").into());
