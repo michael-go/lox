@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Formatter;
+use std::rc::Rc;
 
 use num_traits::FromPrimitive;
 
@@ -23,7 +24,7 @@ impl Default for Options {
 }
 
 struct CallFrame {
-    function: Function,
+    function: Rc<Function>,
     ip: usize,
     slots_base: usize,
 }
@@ -83,8 +84,8 @@ impl RunCtx {
         self.stack.pop().unwrap()
     }
 
-    fn peek(&self, distance: usize) -> Value {
-        self.stack[self.stack.len() - 1 - distance].clone()
+    fn peek(&self, distance: usize) -> &Value {
+        &self.stack[self.stack.len() - 1 - distance]
     }
 
     fn reset_stack(&mut self) {
@@ -106,10 +107,9 @@ impl RunCtx {
         offset | self.read_byte() as u16
     }
 
-    fn read_constant(&mut self) -> Value {
+    fn read_constant(&mut self) -> &Value {
         let constant_index = self.read_byte();
-        // TODO: try to avoid the clone
-        self.current_frame().function.chunk.constants[constant_index as usize].clone()
+        &self.current_frame().function.chunk.constants[constant_index as usize]
     }
 
     fn runtime_error(&mut self, message: &str) -> LoxError {
@@ -151,7 +151,7 @@ impl RunCtx {
         }
     }
 
-    fn call(&mut self, function: Function, arg_count: u8) -> Result<()> {
+    fn call(&mut self, function: Rc<Function>, arg_count: u8) -> Result<()> {
         if self.frames.len() > u8::MAX as usize {
             return Err(self.runtime_error("Stack overflow.").into());
         }
@@ -165,27 +165,33 @@ impl RunCtx {
         Ok(())
     }
 
-    fn call_value(&mut self, callee: Value, arg_count: u8) -> Result<()> {
+    fn call_value(&mut self, callee: &Value, arg_count: u8) -> Result<()> {
         match callee {
-            Value::Obj(Obj::Function(function)) => {
-                if arg_count as usize != function.arity {
+            Value::Obj(obj) => {
+                if let Ok(function) = obj.clone().downcast_rc::<Function>() {
+                    if arg_count as usize != function.arity {
+                        return Err(self
+                            .runtime_error(&format!(
+                                "Expected {} arguments but got {}.",
+                                function.arity, arg_count
+                            ))
+                            .into());
+                    }
+                    self.call(function, arg_count)
+                } else if let Some(native) = obj.downcast_ref::<NativeFunction>() {
+                    let args = &self.stack[self.stack.len() - arg_count as usize..];
+                    let result = (native.function)(args);
+                    self.stack
+                        .truncate(self.stack.len() - arg_count as usize - 1);
+                    self.push(result);
+                    Ok(())
+                } else {
                     return Err(self
-                        .runtime_error(&format!(
-                            "Expected {} arguments but got {}.",
-                            function.arity, arg_count
-                        ))
+                        .runtime_error("Can only call functions and classes.")
                         .into());
                 }
-                self.call(function, arg_count)
             }
-            Value::Obj(Obj::NativeFunction(native)) => {
-                let args = &self.stack[self.stack.len() - arg_count as usize..];
-                let result = (native.function)(args);
-                self.stack
-                    .truncate(self.stack.len() - arg_count as usize - 1);
-                self.push(result);
-                Ok(())
-            }
+
             _ => {
                 return Err(self
                     .runtime_error("Can only call functions and classes.")
@@ -213,11 +219,6 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        // TODO: braindump: `globals`'s lifetime is tied to the lifetime of the VM,
-        //   but the `stack` and `frames` are tied only to the lifetime of the `interpret` function.
-        //   some of the Values in the stack/frames can reference globals (including function objects) from previous runs.
-        // ... so maybe the globals should be the owners of the objects and the stack/frames should store references to them?
-
         let mut compiler = compiler::Compiler::new(source, compiler::FunctionType::Script);
         let function = compiler.compile()?;
         if self.options.trace_execution {
@@ -226,8 +227,10 @@ impl VM {
 
         let mut run_ctx = RunCtx::new();
 
-        run_ctx.push(Value::Obj(Obj::Function(function.clone())));
-        run_ctx.call(function, 0)?;
+        let func_rc = Rc::new(function);
+
+        run_ctx.push(Value::Obj(func_rc.clone()));
+        run_ctx.call(func_rc.clone(), 0)?;
 
         self.run(&mut run_ctx)
     }
@@ -252,7 +255,7 @@ impl VM {
             let instruction = ctx.read_byte();
             match FromPrimitive::from_u8(instruction) {
                 Some(OpCode::Constant) => {
-                    let constant = ctx.read_constant();
+                    let constant = ctx.read_constant().clone();
                     ctx.push(constant);
                 }
                 Some(OpCode::Nil) => ctx.push(Value::Nil),
@@ -274,9 +277,15 @@ impl VM {
                 }
                 Some(OpCode::GetGlobal) => {
                     let name_obj = ctx.read_constant();
-                    if let Value::Obj(Obj::String(name)) = name_obj {
-                        let value = self.globals.get(&name).unwrap_or(&Value::Nil);
-                        ctx.push(value.clone());
+                    if let Value::Obj(obj) = name_obj {
+                        if let Some(name) = obj.downcast_ref::<String>() {
+                            let value = self.globals.get(name).unwrap_or(&Value::Nil);
+                            ctx.push(value.clone());
+                        } else {
+                            return Err(ctx
+                                .runtime_error("internal error: expected variable name")
+                                .into());
+                        }
                     } else {
                         return Err(ctx
                             .runtime_error("internal error: expected variable name")
@@ -285,10 +294,15 @@ impl VM {
                 }
                 Some(OpCode::DefineGlobal) => {
                     let name = ctx.read_constant();
-                    if let Value::Obj(Obj::String(name)) = name {
-                        let val = ctx.peek(0);
-                        self.globals.insert(name, val);
-                        ctx.pop();
+                    if let Value::Obj(obj) = name {
+                        if let Some(name) = obj.downcast_ref::<String>() {
+                            self.globals.insert(name.clone(), ctx.peek(0).clone());
+                            ctx.pop();
+                        } else {
+                            return Err(ctx
+                                .runtime_error("internal error: expected variable name")
+                                .into());
+                        }
                     } else {
                         return Err(ctx
                             .runtime_error("internal error: expected variable name")
@@ -296,15 +310,20 @@ impl VM {
                     }
                 }
                 Some(OpCode::SetGlobal) => {
-                    let name = ctx.read_constant();
-                    if let Value::Obj(Obj::String(name)) = name {
-                        let val = ctx.peek(0);
+                    let name = ctx.read_constant().clone();
 
-                        if self.globals.contains_key(&name) {
-                            self.globals.insert(name, val);
+                    if let Value::Obj(obj) = name {
+                        if let Some(name) = obj.downcast_ref::<String>() {
+                            if self.globals.contains_key(name) {
+                                self.globals.insert(name.clone(), ctx.peek(0).clone());
+                            } else {
+                                return Err(ctx
+                                    .runtime_error(&format!("Undefined variable '{}'.", name))
+                                    .into());
+                            }
                         } else {
                             return Err(ctx
-                                .runtime_error(&format!("Undefined variable {}", name))
+                                .runtime_error("internal error: expected variable name")
                                 .into());
                         }
                     } else {
@@ -329,9 +348,20 @@ impl VM {
                     let a = ctx.pop();
                     match (a, b) {
                         (Value::Number(a), Value::Number(b)) => ctx.push(Value::Number(a + b)),
-                        (Value::Obj(Obj::String(a)), Value::Obj(Obj::String(b))) => {
-                            let new_str = a + &b;
-                            ctx.push(Value::Obj(Obj::String(new_str)))
+                        (Value::Obj(a), Value::Obj(b)) => {
+                            match (a.downcast_ref::<String>(), b.downcast_ref::<String>()) {
+                                (Some(a), Some(b)) => {
+                                    let new_str = a.clone() + b;
+                                    ctx.push(Value::Obj(Rc::new(new_str)));
+                                }
+                                _ => {
+                                    return Err(ctx
+                                        .runtime_error(
+                                            "Operands must be two numbers or two strings.",
+                                        )
+                                        .into())
+                                }
+                            }
                         }
                         _ => {
                             return Err(ctx
@@ -374,7 +404,7 @@ impl VM {
                 }
                 Some(OpCode::JumpIfFalse) => {
                     let offset = ctx.read_short();
-                    if Self::is_falsey(ctx.peek(0)) {
+                    if Self::is_falsey(&ctx.peek(0)) {
                         ctx.frames.last_mut().unwrap().ip += offset as usize;
                     }
                 }
@@ -384,7 +414,8 @@ impl VM {
                 }
                 Some(OpCode::Call) => {
                     let arg_count = ctx.read_byte();
-                    ctx.call_value(ctx.peek(arg_count as usize), arg_count)?;
+                    let val = ctx.peek(arg_count as usize).clone();
+                    ctx.call_value(&val, arg_count)?;
                 }
                 Some(OpCode::Return) => {
                     let result = ctx.pop();
@@ -404,7 +435,7 @@ impl VM {
         }
     }
 
-    fn is_falsey(val: Value) -> bool {
+    fn is_falsey(val: &Value) -> bool {
         match val {
             Value::Nil => true,
             Value::Bool(false) => true,
@@ -416,7 +447,7 @@ impl VM {
         // TODO: in the book key & value pushed/popped to the stack to protect from GC
         self.globals.insert(
             name.to_string(),
-            Value::Obj(Obj::NativeFunction(NativeFunction::new(function))),
+            Value::Obj(Rc::new(NativeFunction::new(function))),
         );
     }
 

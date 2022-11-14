@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::chunk;
 use crate::object::*;
 use crate::scanner;
@@ -60,7 +62,7 @@ struct CompilationUnit {
     pub function: Function,
 }
 
-impl<'a> CompilationUnit {
+impl CompilationUnit {
     pub fn new(
         function_type: FunctionType,
         name: Option<String>,
@@ -536,7 +538,7 @@ impl Compiler {
     }
 
     fn string(&mut self, _can_assign: bool) -> Result<()> {
-        let str_obj = Value::Obj(Obj::String(
+        let str_obj = Value::Obj(Rc::new(
             self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string(),
         ));
         self.emit_constant(str_obj)
@@ -651,7 +653,7 @@ impl Compiler {
     }
 
     fn identifier_constant(&mut self, name: String) -> Result<u8> {
-        let str_obj = Value::Obj(Obj::String(name));
+        let str_obj = Value::Obj(Rc::new(name));
         self.make_constant(str_obj)
     }
 
@@ -952,7 +954,7 @@ impl Compiler {
         self.block()?;
 
         let func = self.end_comp_unit();
-        let constant = self.make_constant(Value::Obj(Obj::Function(func)))?;
+        let constant = self.make_constant(Value::Obj(Rc::new(func)))?;
         self.emit_bytes(chunk::OpCode::Constant.u8(), constant);
 
         Ok(())
