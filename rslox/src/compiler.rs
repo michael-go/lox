@@ -9,6 +9,10 @@ use crate::value::*;
 use anyhow::Result;
 use num_traits::{FromPrimitive, ToPrimitive};
 
+pub fn compile(source: &str) -> Result<Function> {
+    Compiler::new(source).compile()
+}
+
 #[derive(FromPrimitive, ToPrimitive)]
 enum Precedence {
     None = 0,
@@ -88,7 +92,7 @@ impl CompilationUnit {
     }
 }
 
-pub struct Compiler {
+struct Compiler {
     ran: bool,
 
     scanner: scanner::Scanner,
