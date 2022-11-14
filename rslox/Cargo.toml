@@ -10,6 +10,7 @@ clap = { version = "4.0.17", features = ["derive"] }
 anyhow = { version = "1.0.66", features = ["backtrace"] }
 test-generator = "0.3.0" # TODO: move to dev-dependencies
 downcast-rs = "1.2.0"
+arrayvec = "0.7.2"
 
 [dev-dependencies]
 regex = "1.6.0"

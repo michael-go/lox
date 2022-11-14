@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::rc::Rc;
 
+use arrayvec::ArrayVec;
 use num_traits::FromPrimitive;
 
 use anyhow::Result;
@@ -60,19 +61,19 @@ impl LoxError {
     }
 }
 
+const FRAMES_MAX: usize = u8::MAX as usize;
+const STACK_MAX: usize = u8::MAX as usize;
+
 struct RunCtx {
-    // TODO: in clox these are allocated on the stack. consider https://crates.io/crates/arrayvec
-    frames: Vec<CallFrame>,
-    stack: Vec<Value>,
+    frames: ArrayVec<CallFrame, FRAMES_MAX>,
+    stack: ArrayVec<Value, STACK_MAX>,
 }
 
 impl RunCtx {
     pub fn new() -> RunCtx {
         RunCtx {
-            // TODO: reserve space for the stack, maybe have FRAMES_MAX
-            frames: Vec::new(),
-            // TODO: reserve space for the stack, maybe have STACK_MAX
-            stack: Vec::new(),
+            frames: ArrayVec::new(),
+            stack: ArrayVec::new(),
         }
     }
 
@@ -152,7 +153,7 @@ impl RunCtx {
     }
 
     fn call(&mut self, function: Rc<Function>, arg_count: u8) -> Result<()> {
-        if self.frames.len() > u8::MAX as usize {
+        if self.frames.len() >= self.frames.capacity() {
             return Err(self.runtime_error("Stack overflow.").into());
         }
 
