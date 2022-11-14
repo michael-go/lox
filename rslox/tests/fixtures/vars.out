@@ -1,9 +1,6 @@
-# exit code: 65
+# exit code: 0
 # stdout:
 "beignets with espresso"
 
 # stderr:
-[line 8] Error at '=': Invalid assignment target
-Runtime error: Undefined variable 'no_such_var'.
-[line 6] in <script>
 

@@ -143,9 +143,8 @@ impl Compiler {
         }
 
         if had_error {
-            // TODO: return error (need to update some tests, so do in next commit)
+            return Err(anyhow::anyhow!("Had compilation errors"));
         }
-        // TODO: try to avoid the clone
         Ok(self.end_comp_unit())
     }
 

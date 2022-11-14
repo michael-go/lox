@@ -2,7 +2,3 @@ var beverage = "cafe au lait";
 beverage = "espresso";
 var breakfast = "beignets with " + beverage;
 print breakfast;
-
-no_such_var = 42;
-
-breakfast + "foo" = "bar";
