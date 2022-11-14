@@ -220,7 +220,7 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let mut compiler = compiler::Compiler::new(source, compiler::FunctionType::Script);
+        let mut compiler = compiler::Compiler::new(source);
         let function = compiler.compile()?;
         if self.options.trace_execution {
             function.chunk.dissasemble("code");

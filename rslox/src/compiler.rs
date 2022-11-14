@@ -47,7 +47,7 @@ struct Local {
 }
 
 #[derive(Clone)]
-pub enum FunctionType {
+enum FunctionType {
     Function,
     Script,
 }
@@ -102,7 +102,7 @@ pub struct Compiler {
 impl Compiler {
     // TODO: bah ... don't really want a constructor here, just did it to avoid global var
     //  another alternative is to have a function with a closure as context
-    pub fn new(source: &str, function_type: FunctionType) -> Compiler {
+    pub fn new(source: &str) -> Compiler {
         let scanner = scanner::Scanner::new(source);
         static EOF: scanner::Token = scanner::Token {
             kind: TokenKind::Eof,
@@ -116,7 +116,7 @@ impl Compiler {
             current: EOF.clone(),
             previous: EOF.clone(),
 
-            comp_unit: CompilationUnit::new(function_type, None, None),
+            comp_unit: CompilationUnit::new(FunctionType::Script, None, None),
         }
     }
 
