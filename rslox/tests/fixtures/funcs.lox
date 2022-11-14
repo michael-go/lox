@@ -1,0 +1,11 @@
+fun foo() {
+  return "foo ";
+}
+
+fun areWeHavingItYet(suffix) {
+  print "Yes we are! " + foo() + suffix;
+}
+
+print areWeHavingItYet;
+
+areWeHavingItYet("bar");

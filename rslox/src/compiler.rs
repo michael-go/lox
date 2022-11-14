@@ -1,10 +1,17 @@
+use std::rc::Rc;
+
 use crate::chunk;
+use crate::object::*;
 use crate::scanner;
 use crate::scanner::TokenKind;
 use crate::value::*;
 
 use anyhow::Result;
 use num_traits::{FromPrimitive, ToPrimitive};
+
+pub fn compile(source: &str) -> Result<Function> {
+    Compiler::new(source).compile()
+}
 
 #[derive(FromPrimitive, ToPrimitive)]
 enum Precedence {
@@ -31,34 +38,75 @@ impl Precedence {
     }
 }
 
-struct ParseRule<'a> {
-    prefix: Option<fn(&mut Compiler<'a>, can_assign: bool) -> Result<()>>,
-    infix: Option<fn(&mut Compiler<'a>) -> Result<()>>,
+struct ParseRule {
+    prefix: Option<fn(&mut Compiler, can_assign: bool) -> Result<()>>,
+    infix: Option<fn(&mut Compiler) -> Result<()>>,
     precedence: Precedence,
 }
 
+#[derive(Clone)]
 struct Local {
     name: scanner::Token,
     depth: i32,
 }
 
-// TODO: maybe split to Parser & Compiler
-pub struct Compiler<'a> {
-    scanner: scanner::Scanner,
-    chunk: &'a mut chunk::Chunk,
-    current: scanner::Token,
-    previous: scanner::Token,
-    ran: bool,
-
-    // TODO: these are defined in a separate "Compiler" struct in the book
-    locals: Vec<Local>,
-    scope_depth: i32,
+#[derive(Clone)]
+enum FunctionType {
+    Function,
+    Script,
 }
 
-impl<'a> Compiler<'a> {
+#[derive(Clone)]
+struct CompilationUnit {
+    pub enclosing: Option<Box<CompilationUnit>>, // TODO: in clox it's a pointer to the stack, no heap allocation
+
+    pub locals: Vec<Local>,
+    pub scope_depth: i32,
+    pub function_type: FunctionType,
+    pub function: Function,
+}
+
+impl CompilationUnit {
+    pub fn new(
+        function_type: FunctionType,
+        name: Option<String>,
+        enclosing: Option<Box<CompilationUnit>>,
+    ) -> CompilationUnit {
+        let mut locals = Vec::<Local>::with_capacity((u8::MAX as usize) + 1);
+        locals.push(Local {
+            name: scanner::Token {
+                kind: TokenKind::Eof,
+                lexeme: String::new(),
+                line: 0,
+            },
+            depth: 0,
+        });
+        let function = Function::new(name);
+        CompilationUnit {
+            enclosing,
+            locals,
+            scope_depth: 0,
+            function_type,
+            function,
+        }
+    }
+}
+
+struct Compiler {
+    ran: bool,
+
+    scanner: scanner::Scanner,
+    current: scanner::Token,
+    previous: scanner::Token,
+
+    // TODO: this might need be a pointer
+    comp_unit: CompilationUnit,
+}
+
+impl Compiler {
     // TODO: bah ... don't really want a constructor here, just did it to avoid global var
     //  another alternative is to have a function with a closure as context
-    pub fn new(source: &str, chunk: &'a mut chunk::Chunk) -> Compiler<'a> {
+    pub fn new(source: &str) -> Compiler {
         let scanner = scanner::Scanner::new(source);
         static EOF: scanner::Token = scanner::Token {
             kind: TokenKind::Eof,
@@ -66,41 +114,46 @@ impl<'a> Compiler<'a> {
             line: 0,
         };
         Compiler {
-            scanner,
-            chunk,
-            current: EOF.clone(),
-            previous: EOF.clone(),
             ran: false,
 
-            locals: Vec::with_capacity((u8::MAX as usize) + 1),
-            scope_depth: 0,
+            scanner,
+            current: EOF.clone(),
+            previous: EOF.clone(),
+
+            comp_unit: CompilationUnit::new(FunctionType::Script, None, None),
         }
     }
 
-    pub fn compile(&mut self) -> Result<()> {
+    pub fn compile(&mut self) -> Result<Function> {
         if self.ran {
             return Err(anyhow::anyhow!("Compiler can only be used once"));
         }
+        self.ran = true;
+
+        let mut had_error = false;
 
         self.advance()?;
 
         while !self.match_token(TokenKind::Eof)? {
             let res = self.declaration();
             if res.is_err() {
+                had_error = true;
                 self.synchronize()?;
             }
         }
 
-        self.end();
-        Ok(())
+        if had_error {
+            return Err(anyhow::anyhow!("Had compilation errors"));
+        }
+        Ok(self.end_comp_unit())
     }
 
-    fn get_rule(kind: TokenKind) -> ParseRule<'a> {
+    fn get_rule(kind: TokenKind) -> ParseRule {
         match kind {
             TokenKind::LeftParen => ParseRule {
                 prefix: Some(Compiler::grouping),
-                infix: None,
-                precedence: Precedence::None,
+                infix: Some(Compiler::call),
+                precedence: Precedence::Call,
             },
             TokenKind::RightParen => ParseRule {
                 prefix: None,
@@ -381,7 +434,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn current_chunk(&mut self) -> &mut chunk::Chunk {
-        &mut self.chunk
+        &mut self.comp_unit.function.chunk
     }
 
     fn emit_byte(&mut self, byte: u8) {
@@ -394,11 +447,21 @@ impl<'a> Compiler<'a> {
         self.emit_byte(byte2);
     }
 
-    fn end(&mut self) {
+    fn end_comp_unit(&mut self) -> Function {
         self.emit_return();
+
+        let func = self.comp_unit.function.clone();
+
+        // TODO: this is hacky, temporaryly doing it to avoid defining comp_unit as Option
+        if self.comp_unit.enclosing.is_some() {
+            self.comp_unit = *self.comp_unit.enclosing.take().unwrap();
+        }
+
+        return func;
     }
 
     fn emit_return(&mut self) {
+        self.emit_byte(chunk::OpCode::Nil.u8());
         self.emit_byte(chunk::OpCode::Return.u8());
     }
 
@@ -478,19 +541,20 @@ impl<'a> Compiler<'a> {
     }
 
     fn string(&mut self, _can_assign: bool) -> Result<()> {
-        let str_obj = Value::Obj(Obj::String(
+        let str_obj = Value::Obj(Rc::new(
             self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string(),
         ));
         self.emit_constant(str_obj)
     }
 
     fn declaration(&mut self) -> Result<()> {
-        if self.match_token(scanner::TokenKind::Var)? {
-            self.var_declaration()?;
+        if self.match_token(TokenKind::Fun)? {
+            self.fun_declaration()
+        } else if self.match_token(TokenKind::Var)? {
+            self.var_declaration()
         } else {
-            self.statement()?;
+            self.statement()
         }
-        Ok(())
     }
 
     fn statement(&mut self) -> Result<()> {
@@ -500,6 +564,8 @@ impl<'a> Compiler<'a> {
             self.if_statement()
         } else if self.match_token(TokenKind::For)? {
             self.for_statement()
+        } else if self.match_token(TokenKind::Return)? {
+            self.return_statement()
         } else if self.match_token(TokenKind::While)? {
             self.while_statement()
         } else if self.match_token(TokenKind::LeftBrace)? {
@@ -582,7 +648,7 @@ impl<'a> Compiler<'a> {
         self.consume(scanner::TokenKind::Identifier, error_message)?;
 
         self.declare_variable()?;
-        if self.scope_depth > 0 {
+        if self.comp_unit.scope_depth > 0 {
             return Ok(0);
         }
 
@@ -590,12 +656,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn identifier_constant(&mut self, name: String) -> Result<u8> {
-        let str_obj = Value::Obj(Obj::String(name));
+        let str_obj = Value::Obj(Rc::new(name));
         self.make_constant(str_obj)
     }
 
     fn define_variable(&mut self, global: u8) {
-        if self.scope_depth > 0 {
+        if self.comp_unit.scope_depth > 0 {
             self.mark_initialized();
             return;
         }
@@ -604,12 +670,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn declare_variable(&mut self) -> Result<()> {
-        if self.scope_depth == 0 {
+        if self.comp_unit.scope_depth == 0 {
             return Ok(());
         }
 
-        for local in self.locals.iter().rev() {
-            if local.depth >= 0 && local.depth < self.scope_depth {
+        for local in self.comp_unit.locals.iter().rev() {
+            if local.depth >= 0 && local.depth < self.comp_unit.scope_depth {
                 break;
             }
 
@@ -653,11 +719,11 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_local(&mut self, name: scanner::Token) -> Result<()> {
-        if self.locals.len() == u8::MAX as usize {
+        if self.comp_unit.locals.len() == u8::MAX as usize {
             return self.error("Too many local variables in function.");
         }
 
-        self.locals.push(Local { name, depth: -1 });
+        self.comp_unit.locals.push(Local { name, depth: -1 });
         Ok(())
     }
 
@@ -670,23 +736,25 @@ impl<'a> Compiler<'a> {
     }
 
     fn begin_scope(&mut self) {
-        self.scope_depth += 1;
+        self.comp_unit.scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
-        self.scope_depth -= 1;
+        self.comp_unit.scope_depth -= 1;
 
-        while self.locals.len() > 0 && self.locals.last().unwrap().depth > self.scope_depth {
+        while self.comp_unit.locals.len() > 0
+            && self.comp_unit.locals.last().unwrap().depth > self.comp_unit.scope_depth
+        {
             self.emit_byte(chunk::OpCode::Pop.u8());
-            self.locals.pop();
+            self.comp_unit.locals.pop();
         }
     }
 
     fn resolve_local(&self, name: &str) -> Result<Option<u8>> {
         // TODO: can assert that locals.len() < u8::MAX
-        for i in (0..self.locals.len()).rev() {
-            if self.locals[i].name.lexeme == name {
-                if self.locals[i].depth == -1 {
+        for i in (0..self.comp_unit.locals.len()).rev() {
+            if self.comp_unit.locals[i].name.lexeme == name {
+                if self.comp_unit.locals[i].depth == -1 {
                     return self
                         .error("Can't read local variable in its own initializer.")
                         .map(|_| None);
@@ -699,11 +767,10 @@ impl<'a> Compiler<'a> {
     }
 
     fn mark_initialized(&mut self) {
-        if self.scope_depth == 0 {
+        if self.comp_unit.scope_depth == 0 {
             return;
         }
-
-        self.locals.last_mut().unwrap().depth = self.scope_depth;
+        self.comp_unit.locals.last_mut().unwrap().depth = self.comp_unit.scope_depth;
     }
 
     fn if_statement(&mut self) -> Result<()> {
@@ -847,6 +914,93 @@ impl<'a> Compiler<'a> {
         }
 
         self.end_scope();
+        Ok(())
+    }
+
+    fn fun_declaration(&mut self) -> Result<()> {
+        let global = self.parse_variable("Expect function name.")?;
+        self.mark_initialized();
+        self.function(FunctionType::Function)?;
+        self.define_variable(global);
+        Ok(())
+    }
+
+    fn function(&mut self, function_type: FunctionType) -> Result<()> {
+        let name = self.previous.lexeme.clone();
+        let comp_unit = CompilationUnit::new(
+            function_type,
+            Some(name),
+            Some(Box::new(self.comp_unit.clone())),
+        );
+        self.comp_unit = comp_unit;
+
+        self.begin_scope();
+
+        self.consume(TokenKind::LeftParen, "Expect '(' after function name.")?;
+        if !self.check(TokenKind::RightParen) {
+            loop {
+                self.comp_unit.function.arity += 1;
+                if self.comp_unit.function.arity > 255 {
+                    return self.error_at_current("Cannot have more than 255 parameters.");
+                }
+
+                let constant = self.parse_variable("Expect parameter name.")?;
+                self.define_variable(constant);
+
+                if !self.match_token(TokenKind::Comma)? {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenKind::RightParen, "Expect ')' after function name.")?;
+        self.consume(TokenKind::LeftBrace, "Expect '{' before function body.")?;
+        self.block()?;
+
+        let func = self.end_comp_unit();
+        let constant = self.make_constant(Value::Obj(Rc::new(func)))?;
+        self.emit_bytes(chunk::OpCode::Constant.u8(), constant);
+
+        Ok(())
+    }
+
+    fn call(&mut self) -> Result<()> {
+        let arg_count = self.argument_list()?;
+        self.emit_bytes(chunk::OpCode::Call.u8(), arg_count);
+        Ok(())
+    }
+
+    fn argument_list(&mut self) -> Result<u8> {
+        let mut arg_count = 0;
+        if !self.check(TokenKind::RightParen) {
+            loop {
+                self.expression()?;
+                if arg_count == 255 {
+                    return self
+                        .error_at_current("Cannot have more than 255 arguments.")
+                        .map(|_| 0);
+                }
+                arg_count += 1;
+                if !self.match_token(TokenKind::Comma)? {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenKind::RightParen, "Expect ')' after arguments.")?;
+        Ok(arg_count)
+    }
+
+    fn return_statement(&mut self) -> Result<()> {
+        if let FunctionType::Script = self.comp_unit.function_type {
+            return self.error("Cannot return from top-level code.");
+        }
+
+        if self.match_token(TokenKind::Semicolon)? {
+            self.emit_return();
+        } else {
+            self.expression()?;
+            self.consume(TokenKind::Semicolon, "Expect ';' after return value.")?;
+            self.emit_byte(chunk::OpCode::Return.u8());
+        }
         Ok(())
     }
 }

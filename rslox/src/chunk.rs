@@ -29,6 +29,7 @@ pub enum OpCode {
     Jump,
     JumpIfFalse,
     Loop,
+    Call,
     Return,
 }
 
@@ -38,7 +39,7 @@ impl OpCode {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
@@ -116,6 +117,7 @@ impl Chunk {
                 self.dissasemble_jump_instruction("JumpIfFalse", 1, offset)
             }
             Some(OpCode::Loop) => self.dissasemble_jump_instruction("Loop", -1, offset),
+            Some(OpCode::Call) => self.dissasemble_byte_instruction("Call", offset),
             Some(OpCode::Return) => self.dissasemble_simple_instruction("Return", offset),
             None => {
                 println!("Unknown opcode {}", instruction);

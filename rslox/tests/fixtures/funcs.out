@@ -1,0 +1,7 @@
+# exit code: 0
+# stdout:
+<fn areWeHavingItYet>
+"Yes we are! foo bar"
+
+# stderr:
+

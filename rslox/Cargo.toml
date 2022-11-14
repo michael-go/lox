@@ -8,8 +8,13 @@ num-traits = "0.2"
 num-derive = "0.2"
 clap = { version = "4.0.17", features = ["derive"] }
 anyhow = { version = "1.0.66", features = ["backtrace"] }
-test-generator = "0.3.0"
+downcast-rs = "1.2.0"
+arrayvec = "0.7.2"
 
 [dev-dependencies]
 regex = "1.6.0"
 test-case = "2.2.2"
+test-generator = "0.3.0"
+
+[profile.release]
+debug = true

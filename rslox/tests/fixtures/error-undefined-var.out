@@ -1,0 +1,7 @@
+# exit code: 65
+# stdout:
+
+# stderr:
+Runtime error: Undefined variable 'no_such_var'.
+[line 1] in <script>
+
