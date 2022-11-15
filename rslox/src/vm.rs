@@ -205,7 +205,7 @@ impl RunCtx {
 pub struct VM {
     options: Options,
 
-    globals: HashMap<String, Value>,
+    globals: HashMap<ObjString, Value>,
 }
 
 impl VM {
@@ -278,7 +278,7 @@ impl VM {
                 Some(OpCode::GetGlobal) => {
                     let name_obj = ctx.read_constant();
                     if let Value::Obj(obj) = name_obj {
-                        if let Some(name) = obj.downcast_ref::<String>() {
+                        if let Some(name) = obj.downcast_ref::<ObjString>() {
                             let value = self.globals.get(name).unwrap_or(&Value::Nil);
                             ctx.push(value.clone());
                         } else {
@@ -295,7 +295,7 @@ impl VM {
                 Some(OpCode::DefineGlobal) => {
                     let name = ctx.read_constant();
                     if let Value::Obj(obj) = name {
-                        if let Some(name) = obj.downcast_ref::<String>() {
+                        if let Some(name) = obj.downcast_ref::<ObjString>() {
                             self.globals.insert(name.clone(), ctx.peek(0).clone());
                             ctx.pop();
                         } else {
@@ -313,7 +313,7 @@ impl VM {
                     let name = ctx.read_constant().clone();
 
                     if let Value::Obj(obj) = name {
-                        if let Some(name) = obj.downcast_ref::<String>() {
+                        if let Some(name) = obj.downcast_ref::<ObjString>() {
                             if self.globals.contains_key(name) {
                                 self.globals.insert(name.clone(), ctx.peek(0).clone());
                             } else {
@@ -349,9 +349,9 @@ impl VM {
                     match (a, b) {
                         (Value::Number(a), Value::Number(b)) => ctx.push(Value::Number(a + b)),
                         (Value::Obj(a), Value::Obj(b)) => {
-                            match (a.downcast_ref::<String>(), b.downcast_ref::<String>()) {
+                            match (a.downcast_ref::<ObjString>(), b.downcast_ref::<ObjString>()) {
                                 (Some(a), Some(b)) => {
-                                    let new_str = a.clone() + b;
+                                    let new_str = ObjString::new(a.clone().string + &b.string);
                                     ctx.push(Value::Obj(Rc::new(new_str)));
                                 }
                                 _ => {
@@ -446,7 +446,7 @@ impl VM {
     fn define_native(&mut self, name: &str, function: fn(&[Value]) -> Value) {
         // TODO: in the book key & value pushed/popped to the stack to protect from GC
         self.globals.insert(
-            name.to_string(),
+            ObjString::new(name.to_string()),
             Value::Obj(Rc::new(NativeFunction::new(function))),
         );
     }

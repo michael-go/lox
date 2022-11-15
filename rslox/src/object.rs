@@ -1,5 +1,9 @@
 use crate::chunk::Chunk;
 use crate::value::Value;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 
 use downcast_rs::{impl_downcast, Downcast};
 
@@ -18,7 +22,7 @@ impl_downcast!(Obj);
 impl std::fmt::Display for dyn Obj {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.obj_type() {
-            ObjType::String => write!(fmt, "\"{}\"", self.downcast_ref::<String>().unwrap()),
+            ObjType::String => write!(fmt, "\"{}\"", self.downcast_ref::<ObjString>().unwrap()),
             ObjType::Function => write!(fmt, "{}", self.downcast_ref::<Function>().unwrap()),
             ObjType::NativeFunction => {
                 write!(fmt, "{}", self.downcast_ref::<NativeFunction>().unwrap())
@@ -35,7 +39,7 @@ impl PartialEq for dyn Obj {
 
         match self.obj_type() {
             ObjType::String => {
-                return self.downcast_ref::<String>() == other.downcast_ref::<String>();
+                return self.downcast_ref::<ObjString>() == other.downcast_ref::<ObjString>();
             }
             ObjType::Function => {
                 return self.downcast_ref::<Function>() == other.downcast_ref::<Function>();
@@ -117,8 +121,45 @@ impl NativeFunction {
     }
 }
 
-impl Obj for String {
+#[derive(Clone)]
+pub struct ObjString {
+    pub string: String,
+    pub hash: u64,
+}
+
+impl Obj for ObjString {
     fn obj_type(&self) -> ObjType {
         ObjType::String
+    }
+}
+
+impl ObjString {
+    pub fn new(string: String) -> ObjString {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(string.as_bytes());
+        let hash = hasher.finish();
+
+        ObjString { string, hash }
+    }
+}
+
+impl PartialEq for ObjString {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash && self.string == other.string
+    }
+}
+
+impl Eq for ObjString {}
+
+// A naive attenot to speed-up access to HashMap<ObjString, ...>
+impl Hash for ObjString {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.hash.hash(state);
+    }
+}
+
+impl std::fmt::Display for ObjString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.string)
     }
 }

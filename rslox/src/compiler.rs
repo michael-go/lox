@@ -541,9 +541,9 @@ impl Compiler {
     }
 
     fn string(&mut self, _can_assign: bool) -> Result<()> {
-        let str_obj = Value::Obj(Rc::new(
+        let str_obj = Value::Obj(Rc::new(ObjString::new(
             self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string(),
-        ));
+        )));
         self.emit_constant(str_obj)
     }
 
@@ -656,7 +656,7 @@ impl Compiler {
     }
 
     fn identifier_constant(&mut self, name: String) -> Result<u8> {
-        let str_obj = Value::Obj(Rc::new(name));
+        let str_obj = Value::Obj(Rc::new(ObjString::new(name)));
         self.make_constant(str_obj)
     }
 
