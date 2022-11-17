@@ -2,9 +2,10 @@ use anyhow::Result;
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
 
+use crate::object::*;
 use crate::value::Value;
 
-#[derive(FromPrimitive)]
+#[derive(Clone, Copy, FromPrimitive)]
 pub enum OpCode {
     Constant = 0,
     Nil,
@@ -16,6 +17,8 @@ pub enum OpCode {
     GetGlobal,
     DefineGlobal,
     SetGlobal,
+    GetUpvalue,
+    SetUpvalue,
     Equal,
     Greater,
     Less,
@@ -30,6 +33,8 @@ pub enum OpCode {
     JumpIfFalse,
     Loop,
     Call,
+    Closure,
+    CloseUpvalue,
     Return,
 }
 
@@ -102,6 +107,8 @@ impl Chunk {
                 self.dissasemble_constant_instruction("DefineGlobal", offset)
             }
             Some(OpCode::SetGlobal) => self.dissasemble_constant_instruction("SetGlobal", offset),
+            Some(OpCode::GetUpvalue) => self.dissasemble_byte_instruction("GetUpvalue", offset),
+            Some(OpCode::SetUpvalue) => self.dissasemble_byte_instruction("SetUpvalue", offset),
             Some(OpCode::Equal) => self.dissasemble_simple_instruction("Equal", offset),
             Some(OpCode::Greater) => self.dissasemble_simple_instruction("Greater", offset),
             Some(OpCode::Less) => self.dissasemble_simple_instruction("Less", offset),
@@ -118,6 +125,34 @@ impl Chunk {
             }
             Some(OpCode::Loop) => self.dissasemble_jump_instruction("Loop", -1, offset),
             Some(OpCode::Call) => self.dissasemble_byte_instruction("Call", offset),
+            Some(OpCode::Closure) => {
+                let constant = self.code[offset + 1];
+                print!("{:16} {:04} ", "Closure", constant);
+                let value = &self.constants[constant as usize];
+                println!("{}", value);
+
+                let mut next_offset = offset + 2;
+                if let Value::Obj(obj) = value {
+                    let function = obj.downcast_ref::<Function>().unwrap();
+                    for _ in 0..function.upvalue_count {
+                        let is_local = self.code[offset];
+                        let is_local_str = if is_local == 1 { "local" } else { "upvalue" };
+                        let index = self.code[offset + 1];
+                        println!(
+                            "{:04}      |                     {:04} {}",
+                            offset, is_local_str, index
+                        );
+                        next_offset += 2;
+                    }
+                } else {
+                    panic!("Expected function value.");
+                }
+
+                next_offset
+            }
+            Some(OpCode::CloseUpvalue) => {
+                self.dissasemble_simple_instruction("CloseUpvalue", offset)
+            }
             Some(OpCode::Return) => self.dissasemble_simple_instruction("Return", offset),
             None => {
                 println!("Unknown opcode {}", instruction);

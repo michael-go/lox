@@ -4,12 +4,14 @@ use downcast_rs::{impl_downcast, Downcast};
 include!("string.rs");
 include!("function.rs");
 include!("native-function.rs");
+include!("closure.rs");
 
 #[derive(PartialEq)]
 pub enum ObjType {
     String,
     Function,
     NativeFunction,
+    Closure,
 }
 
 pub trait Obj: Downcast {
@@ -25,6 +27,7 @@ impl std::fmt::Display for dyn Obj {
             ObjType::NativeFunction => {
                 write!(fmt, "{}", self.downcast_ref::<NativeFunction>().unwrap())
             }
+            ObjType::Closure => write!(fmt, "{}", self.downcast_ref::<Closure>().unwrap()),
         }
     }
 }
@@ -45,6 +48,9 @@ impl PartialEq for dyn Obj {
             ObjType::NativeFunction => {
                 return self.downcast_ref::<NativeFunction>()
                     == other.downcast_ref::<NativeFunction>();
+            }
+            ObjType::Closure => {
+                return self.downcast_ref::<Closure>() == other.downcast_ref::<Closure>();
             }
         }
     }

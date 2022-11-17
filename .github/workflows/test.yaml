@@ -23,6 +23,8 @@ jobs:
         working-directory: rslox
     steps:
       - uses: actions/checkout@v3
+      - name: install rustfmt
+        run: rustup component add rustfmt
       - name: Check fmt
         run: rustfmt --check src/main.rs
       - name: Build
