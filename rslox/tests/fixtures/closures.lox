@@ -1,0 +1,57 @@
+print "# basic:";
+
+fun outer() {
+  var x = "outside";
+  fun inner() {
+    print x;
+  }
+
+  return inner;
+}
+
+var closure = outer();
+closure();
+
+/////
+print "# set in closure:";
+
+var globalSet;
+var globalGet;
+
+fun main() {
+  var a = "initial";
+
+  fun set() { a = "updated"; }
+  fun get() { print a; }
+
+  globalSet = set;
+  globalGet = get;
+}
+
+main();
+globalSet();
+globalGet();
+
+/////
+print "# nested closures:";
+
+fun outer() {
+  var x = "value";
+
+  fun middle() {
+    // print x;
+    fun inner() {
+      print x;
+    }
+
+    print "create inner closure";
+    return inner;
+  }
+
+  print "return from outer";
+  return middle;
+}
+
+var mid = outer();
+var in = mid();
+in();

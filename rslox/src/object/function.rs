@@ -5,6 +5,7 @@ pub struct Function {
     pub arity: usize,
     pub chunk: Chunk,
     pub name: String, // TODO: this should be an Obj::String?
+    pub upvalue_count: usize,
 }
 
 impl Obj for Function {
@@ -36,6 +37,7 @@ impl Function {
             arity: 0,
             chunk: Chunk::new(),
             name: func_name,
+            upvalue_count: 0,
         }
     }
 }

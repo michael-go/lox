@@ -1,4 +1,6 @@
 use hashbrown::HashMap;
+use std::cell::RefCell;
+use std::collections::LinkedList;
 use std::fmt::Formatter;
 use std::rc::Rc;
 
@@ -25,7 +27,7 @@ impl Default for Options {
 }
 
 struct CallFrame {
-    function: Rc<Function>,
+    closure: Rc<Closure>,
     ip: usize,
     slots_base: usize,
 }
@@ -67,6 +69,7 @@ const STACK_MAX: usize = u8::MAX as usize;
 struct RunCtx {
     frames: ArrayVec<CallFrame, FRAMES_MAX>,
     stack: ArrayVec<Value, STACK_MAX>,
+    open_upvalues: LinkedList<Rc<RefCell<Upvalue>>>,
 }
 
 impl RunCtx {
@@ -74,6 +77,7 @@ impl RunCtx {
         RunCtx {
             frames: ArrayVec::new(),
             stack: ArrayVec::new(),
+            open_upvalues: LinkedList::new(),
         }
     }
 
@@ -98,7 +102,7 @@ impl RunCtx {
     }
 
     fn read_byte(&mut self) -> u8 {
-        let byte = self.current_frame().function.chunk.code[self.current_frame().ip];
+        let byte = self.current_frame().closure.function.chunk.code[self.current_frame().ip];
         self.frames.last_mut().unwrap().ip += 1;
         byte
     }
@@ -110,15 +114,15 @@ impl RunCtx {
 
     fn read_constant(&mut self) -> &Value {
         let constant_index = self.read_byte();
-        &self.current_frame().function.chunk.constants[constant_index as usize]
+        &self.current_frame().closure.function.chunk.constants[constant_index as usize]
     }
 
     fn runtime_error(&mut self, message: &str) -> LoxError {
         eprintln!("Runtime error: {}", message);
 
         for frame in self.frames.iter().rev() {
-            let line = frame.function.chunk.lines[&(frame.ip - 1)];
-            eprintln!("[line {}] in {}", line, frame.function);
+            let line = frame.closure.function.chunk.lines[&(frame.ip - 1)];
+            eprintln!("[line {}] in {}", line, frame.closure.function);
         }
 
         self.reset_stack();
@@ -152,13 +156,21 @@ impl RunCtx {
         }
     }
 
-    fn call(&mut self, function: Rc<Function>, arg_count: u8) -> Result<()> {
+    fn call(&mut self, closure: Rc<Closure>, arg_count: u8) -> Result<()> {
         if self.frames.len() >= self.frames.capacity() {
             return Err(self.runtime_error("Stack overflow.").into());
         }
+        if arg_count as usize != closure.function.arity {
+            return Err(self
+                .runtime_error(&format!(
+                    "Expected {} arguments but got {}.",
+                    closure.function.arity, arg_count
+                ))
+                .into());
+        }
 
         let frame = CallFrame {
-            function,
+            closure,
             ip: 0,
             slots_base: self.stack.len() - arg_count as usize - 1,
         };
@@ -169,16 +181,8 @@ impl RunCtx {
     fn call_value(&mut self, callee: &Value, arg_count: u8) -> Result<()> {
         match callee {
             Value::Obj(obj) => {
-                if let Ok(function) = obj.clone().downcast_rc::<Function>() {
-                    if arg_count as usize != function.arity {
-                        return Err(self
-                            .runtime_error(&format!(
-                                "Expected {} arguments but got {}.",
-                                function.arity, arg_count
-                            ))
-                            .into());
-                    }
-                    self.call(function, arg_count)
+                if let Ok(closure) = obj.clone().downcast_rc::<Closure>() {
+                    self.call(closure, arg_count)
                 } else if let Some(native) = obj.downcast_ref::<NativeFunction>() {
                     let args = &self.stack[self.stack.len() - arg_count as usize..];
                     let result = (native.function)(args);
@@ -199,6 +203,46 @@ impl RunCtx {
                     .into())
             }
         }
+    }
+
+    fn capture_upvalue(&mut self, stack_offset: usize) -> Rc<RefCell<Upvalue>> {
+        let mut cursor = self.open_upvalues.cursor_front_mut();
+        let mut next = cursor.current();
+
+        while let Some(upvalue) = next {
+            if upvalue.as_ref().borrow().location == stack_offset {
+                return upvalue.clone();
+            }
+
+            if upvalue.as_ref().borrow().location < stack_offset {
+                break;
+            }
+
+            next = cursor.peek_next();
+        }
+
+        let created_upvalue = Rc::new(RefCell::new(Upvalue {
+            location: stack_offset,
+            closed: None,
+        }));
+
+        cursor.insert_after(created_upvalue.clone());
+        created_upvalue
+    }
+
+    fn close_upvalues(&mut self, last_location: usize) -> Result<()> {
+        let mut cursor = self.open_upvalues.cursor_front_mut();
+
+        while let Some(upvalue) = cursor.current() {
+            if upvalue.as_ref().borrow().location < last_location {
+                break;
+            }
+
+            let value = self.stack[upvalue.as_ref().borrow().location].clone();
+            upvalue.borrow_mut().closed = Some(value);
+            cursor.remove_current();
+        }
+        Ok(())
     }
 }
 
@@ -227,10 +271,9 @@ impl VM {
 
         let mut run_ctx = RunCtx::new();
 
-        let func_rc = Rc::new(function);
-
-        run_ctx.push(Value::Obj(func_rc.clone()));
-        run_ctx.call(func_rc.clone(), 0)?;
+        let closure = Rc::new(Closure::new(function));
+        run_ctx.push(Value::Obj(closure.clone()));
+        run_ctx.call(closure, 0)?;
 
         self.run(&mut run_ctx)
     }
@@ -247,6 +290,7 @@ impl VM {
                 ctx.frames
                     .last()
                     .unwrap()
+                    .closure
                     .function
                     .chunk
                     .disassemble_instruction(ctx.frames.last().unwrap().ip);
@@ -330,6 +374,30 @@ impl VM {
                         return Err(ctx
                             .runtime_error("internal error: expected variable name")
                             .into());
+                    }
+                }
+                Some(OpCode::GetUpvalue) => {
+                    let slot = ctx.read_byte();
+                    let upvalue =
+                        ctx.frames.last().unwrap().closure.upvalues[slot as usize].clone();
+                    if let Some(value) = upvalue.clone().as_ref().borrow().closed.clone() {
+                        ctx.push(value.clone());
+                    } else {
+                        let location = upvalue.as_ref().borrow().location;
+                        let value = ctx.stack[location].clone();
+                        ctx.push(value);
+                    }
+                }
+                Some(OpCode::SetUpvalue) => {
+                    let slot = ctx.read_byte();
+                    let value = ctx.peek(0).clone();
+                    let upvalue =
+                        ctx.frames.last().unwrap().closure.upvalues[slot as usize].clone();
+                    if upvalue.as_ref().borrow().closed.is_some() {
+                        upvalue.borrow_mut().closed = Some(value);
+                    } else {
+                        let location = upvalue.as_ref().borrow().location;
+                        ctx.stack[location] = value
                     }
                 }
                 Some(OpCode::Equal) => {
@@ -417,9 +485,48 @@ impl VM {
                     let val = ctx.peek(arg_count as usize).clone();
                     ctx.call_value(&val, arg_count)?;
                 }
+                Some(OpCode::Closure) => {
+                    let constant = ctx.read_constant();
+                    if let Value::Obj(obj) = constant {
+                        if let Some(function) = obj.downcast_ref::<Function>() {
+                            let mut closure = Closure::new(function.clone());
+                            for _ in 0..function.upvalue_count {
+                                let is_local = ctx.read_byte();
+                                let index = ctx.read_byte();
+                                if is_local == 1 {
+                                    let stack_offset =
+                                        ctx.frames.last().unwrap().slots_base + index as usize;
+                                    let upvalue = ctx.capture_upvalue(stack_offset);
+                                    closure.upvalues.push(upvalue);
+                                } else {
+                                    let upvalue = ctx.frames.last().unwrap().closure.upvalues
+                                        [index as usize]
+                                        .clone();
+                                    closure.upvalues.push(upvalue);
+                                }
+                            }
+                            ctx.push(Value::Obj(Rc::new(closure)));
+                        } else {
+                            return Err(ctx
+                                .runtime_error("internal error: expected function")
+                                .into());
+                        }
+                    } else {
+                        return Err(ctx
+                            .runtime_error("internal error: expected function")
+                            .into());
+                    }
+                }
+                Some(OpCode::CloseUpvalue) => {
+                    ctx.close_upvalues(ctx.stack.len() - 1)?;
+                    ctx.pop();
+                }
                 Some(OpCode::Return) => {
                     let result = ctx.pop();
                     let current_frame_base = ctx.frames.last().unwrap().slots_base;
+
+                    ctx.close_upvalues(current_frame_base)?;
+
                     ctx.frames.pop();
                     if ctx.frames.is_empty() {
                         return Ok(());

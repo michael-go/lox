@@ -13,7 +13,7 @@ pub fn compile(source: &str) -> Result<Function> {
     Compiler::new(source).compile()
 }
 
-#[derive(FromPrimitive, ToPrimitive)]
+#[derive(Clone, Copy, FromPrimitive, ToPrimitive)]
 enum Precedence {
     None = 0,
     Assignment, // =
@@ -48,6 +48,7 @@ struct ParseRule {
 struct Local {
     name: scanner::Token,
     depth: i32,
+    is_captured: bool,
 }
 
 #[derive(Clone)]
@@ -57,10 +58,17 @@ enum FunctionType {
 }
 
 #[derive(Clone)]
+struct Upvalue {
+    index: u8,
+    is_local: bool,
+}
+
+#[derive(Clone)]
 struct CompilationUnit {
     pub enclosing: Option<Box<CompilationUnit>>, // TODO: in clox it's a pointer to the stack, no heap allocation
 
     pub locals: Vec<Local>,
+    pub upvalues: Vec<Upvalue>,
     pub scope_depth: i32,
     pub function_type: FunctionType,
     pub function: Function,
@@ -80,15 +88,77 @@ impl CompilationUnit {
                 line: 0,
             },
             depth: 0,
+            is_captured: false,
         });
         let function = Function::new(name);
         CompilationUnit {
             enclosing,
             locals,
+            upvalues: Vec::new(),
             scope_depth: 0,
             function_type,
             function,
         }
+    }
+
+    fn resolve_local(&self, name: &str, token: &scanner::Token) -> Result<Option<u8>> {
+        // TODO: can assert that locals.len() < u8::MAX
+        for i in (0..self.locals.len()).rev() {
+            if self.locals[i].name.lexeme == name {
+                if self.locals[i].depth == -1 {
+                    return error_at(&token, "Can't read local variable in its own initializer.")
+                        .map(|_| None);
+                }
+                return Ok(Some(i as u8));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn resolve_upvalue(&mut self, name: &str, token: &scanner::Token) -> Result<Option<u8>> {
+        if self.enclosing.is_none() {
+            return Ok(None);
+        }
+
+        let local = self
+            .enclosing
+            .as_ref()
+            .unwrap()
+            .resolve_local(name, token)?;
+        if let Some(local) = local {
+            self.enclosing.as_mut().unwrap().locals[local as usize].is_captured = true;
+            return Ok(Some(self.add_upvalue(local, true, token)?));
+        }
+
+        let upvalue = self
+            .enclosing
+            .as_mut()
+            .unwrap()
+            .resolve_upvalue(name, token)?;
+        if let Some(upvalue) = upvalue {
+            return Ok(Some(self.add_upvalue(upvalue, false, token)?));
+        }
+
+        Ok(None)
+    }
+
+    fn add_upvalue(&mut self, index: u8, is_local: bool, token: &scanner::Token) -> Result<u8> {
+        for i in 0..self.upvalues.len() {
+            let upvalue = &self.upvalues[i];
+            if upvalue.index == index && upvalue.is_local == is_local {
+                return Ok(i as u8);
+            }
+        }
+
+        if self.upvalues.len() == u8::MAX as usize {
+            return error_at(token, "Too many closure variables in function.").map(|_| 0);
+        }
+
+        self.function.upvalue_count += 1;
+        let upvalue = Upvalue { index, is_local };
+        self.upvalues.push(upvalue);
+        Ok(self.upvalues.len() as u8 - 1)
     }
 }
 
@@ -403,26 +473,11 @@ impl Compiler {
     }
 
     fn error_at_current(&self, message: &str) -> Result<()> {
-        self.error_at(&self.current, message)
+        error_at(&self.current, message)
     }
 
     fn error(&self, message: &str) -> Result<()> {
-        self.error_at(&self.previous, message)
-    }
-
-    fn error_at(&self, token: &scanner::Token, message: &str) -> Result<()> {
-        eprint!("[line {}] Error", token.line);
-
-        if token.kind == scanner::TokenKind::Eof {
-            eprint!(" at end");
-        } else if token.kind == scanner::TokenKind::Error {
-            // Nothing
-        } else {
-            eprint!(" at '{}'", token.lexeme);
-        }
-
-        eprintln!(": {}", message);
-        Err(anyhow::anyhow!("Compiler error"))
+        error_at(&self.previous, message)
     }
 
     fn consume(&mut self, kind: scanner::TokenKind, message: &str) -> Result<()> {
@@ -699,10 +754,14 @@ impl Compiler {
         let get_op: chunk::OpCode;
         let set_op: chunk::OpCode;
 
-        if let Some(local_index) = self.resolve_local(&name)? {
+        if let Some(local_index) = self.comp_unit.resolve_local(&name, &self.previous)? {
             get_op = chunk::OpCode::GetLocal;
             set_op = chunk::OpCode::SetLocal;
             arg = local_index;
+        } else if let Some(upvalue_index) = self.comp_unit.resolve_upvalue(&name, &self.previous)? {
+            get_op = chunk::OpCode::GetUpvalue;
+            set_op = chunk::OpCode::SetUpvalue;
+            arg = upvalue_index;
         } else {
             arg = self.identifier_constant(name)?;
             get_op = chunk::OpCode::GetGlobal;
@@ -723,7 +782,11 @@ impl Compiler {
             return self.error("Too many local variables in function.");
         }
 
-        self.comp_unit.locals.push(Local { name, depth: -1 });
+        self.comp_unit.locals.push(Local {
+            name,
+            depth: -1,
+            is_captured: false,
+        });
         Ok(())
     }
 
@@ -745,25 +808,13 @@ impl Compiler {
         while self.comp_unit.locals.len() > 0
             && self.comp_unit.locals.last().unwrap().depth > self.comp_unit.scope_depth
         {
-            self.emit_byte(chunk::OpCode::Pop.u8());
+            if self.comp_unit.locals.last().unwrap().is_captured {
+                self.emit_byte(chunk::OpCode::CloseUpvalue.u8());
+            } else {
+                self.emit_byte(chunk::OpCode::Pop.u8());
+            }
             self.comp_unit.locals.pop();
         }
-    }
-
-    fn resolve_local(&self, name: &str) -> Result<Option<u8>> {
-        // TODO: can assert that locals.len() < u8::MAX
-        for i in (0..self.comp_unit.locals.len()).rev() {
-            if self.comp_unit.locals[i].name.lexeme == name {
-                if self.comp_unit.locals[i].depth == -1 {
-                    return self
-                        .error("Can't read local variable in its own initializer.")
-                        .map(|_| None);
-                }
-                return Ok(Some(i as u8));
-            }
-        }
-
-        Ok(None)
     }
 
     fn mark_initialized(&mut self) {
@@ -956,9 +1007,17 @@ impl Compiler {
         self.consume(TokenKind::LeftBrace, "Expect '{' before function body.")?;
         self.block()?;
 
+        let upvalues = self.comp_unit.upvalues.clone();
         let func = self.end_comp_unit();
+        let upvalue_count = func.upvalue_count;
+
         let constant = self.make_constant(Value::Obj(Rc::new(func)))?;
-        self.emit_bytes(chunk::OpCode::Constant.u8(), constant);
+        self.emit_bytes(chunk::OpCode::Closure.u8(), constant);
+
+        for i in 0..upvalue_count {
+            let upvalue = upvalues[i as usize].clone();
+            self.emit_bytes(upvalue.is_local as u8, upvalue.index);
+        }
 
         Ok(())
     }
@@ -1003,4 +1062,19 @@ impl Compiler {
         }
         Ok(())
     }
+}
+
+fn error_at(token: &scanner::Token, message: &str) -> Result<()> {
+    eprint!("[line {}] Error", token.line);
+
+    if token.kind == scanner::TokenKind::Eof {
+        eprint!(" at end");
+    } else if token.kind == scanner::TokenKind::Error {
+        // Nothing
+    } else {
+        eprint!(" at '{}'", token.lexeme);
+    }
+
+    eprintln!(": {}", message);
+    Err(anyhow::anyhow!("Compiler error"))
 }

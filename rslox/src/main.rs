@@ -1,3 +1,5 @@
+#![feature(linked_list_cursors)]
+
 mod chunk;
 mod compiler;
 mod object;
