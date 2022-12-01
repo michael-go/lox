@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 #[derive(PartialEq)]
 pub struct Class {
@@ -26,7 +26,7 @@ impl std::fmt::Display for Class {
 #[derive(PartialEq)]
 pub struct Instance {
     pub class: Rc<Class>,
-    pub fields: RefCell<HashMap<String, Value>>, // Maybe ObjString as key
+    pub fields: RefCell<HashMap<ObjString, Value>>,
 }
 
 impl Instance {

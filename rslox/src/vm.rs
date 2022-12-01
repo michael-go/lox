@@ -387,9 +387,7 @@ impl VM {
                             let instance = ctx.pop();
                             if let Value::Obj(instance) = instance {
                                 if let Some(instance) = instance.downcast_ref::<Instance>() {
-                                    if let Some(value) =
-                                        instance.fields.borrow().get(name.string.as_str())
-                                    {
+                                    if let Some(value) = instance.fields.borrow().get(name) {
                                         ctx.push(value.clone());
                                     } else {
                                         return Err(ctx
@@ -430,7 +428,7 @@ impl VM {
                                     instance
                                         .fields
                                         .borrow_mut()
-                                        .insert(name.string.clone(), value.clone());
+                                        .insert(name.clone(), value.clone());
                                     ctx.push(value);
                                 } else {
                                     return Err(ctx
