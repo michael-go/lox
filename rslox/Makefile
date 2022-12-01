@@ -1,7 +1,7 @@
 build:
 	cargo build
 	
-gen-fixture-outs: build
+gen-fixture-outs: build install-cargo-script
 	cargo script tests/create-fixture-outs.rs
 	
 test:
@@ -9,3 +9,6 @@ test:
 
 fmt:
 	cargo fmt
+
+install-cargo-script:
+	cargo install cargo-script
