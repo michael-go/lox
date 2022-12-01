@@ -1,0 +1,20 @@
+class Brioche {}
+print Brioche;
+print Brioche();
+
+print "---";
+
+class Toast {}
+var toast = Toast();
+toast.jam = "grape";
+print toast.jam;
+print toast.cheese = "gauda";
+
+
+print "---";
+
+class Pair {}
+var pair = Pair();
+pair.first = 1;
+pair.second = 2;
+print pair.first + pair.second;

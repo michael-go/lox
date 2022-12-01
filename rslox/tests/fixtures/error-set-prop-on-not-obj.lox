@@ -1,0 +1,2 @@
+var num = 7;
+num.field = "foo";

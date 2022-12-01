@@ -17,6 +17,8 @@ pub enum OpCode {
     GetGlobal,
     DefineGlobal,
     SetGlobal,
+    GetProperty,
+    SetProperty,
     GetUpvalue,
     SetUpvalue,
     Equal,
@@ -36,6 +38,7 @@ pub enum OpCode {
     Closure,
     CloseUpvalue,
     Return,
+    Class,
 }
 
 impl OpCode {
@@ -107,6 +110,12 @@ impl Chunk {
                 self.dissasemble_constant_instruction("DefineGlobal", offset)
             }
             Some(OpCode::SetGlobal) => self.dissasemble_constant_instruction("SetGlobal", offset),
+            Some(OpCode::GetProperty) => {
+                self.dissasemble_constant_instruction("GetProperty", offset)
+            }
+            Some(OpCode::SetProperty) => {
+                self.dissasemble_constant_instruction("SetProperty", offset)
+            }
             Some(OpCode::GetUpvalue) => self.dissasemble_byte_instruction("GetUpvalue", offset),
             Some(OpCode::SetUpvalue) => self.dissasemble_byte_instruction("SetUpvalue", offset),
             Some(OpCode::Equal) => self.dissasemble_simple_instruction("Equal", offset),
@@ -154,6 +163,7 @@ impl Chunk {
                 self.dissasemble_simple_instruction("CloseUpvalue", offset)
             }
             Some(OpCode::Return) => self.dissasemble_simple_instruction("Return", offset),
+            Some(OpCode::Class) => self.dissasemble_constant_instruction("Class", offset),
             None => {
                 println!("Unknown opcode {}", instruction);
                 offset + 1

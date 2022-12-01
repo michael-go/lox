@@ -5,6 +5,7 @@ include!("string.rs");
 include!("function.rs");
 include!("native-function.rs");
 include!("closure.rs");
+include!("class.rs");
 
 #[derive(PartialEq)]
 pub enum ObjType {
@@ -12,6 +13,8 @@ pub enum ObjType {
     Function,
     NativeFunction,
     Closure,
+    Class,
+    Instance,
 }
 
 pub trait Obj: Downcast {
@@ -28,6 +31,8 @@ impl std::fmt::Display for dyn Obj {
                 write!(fmt, "{}", self.downcast_ref::<NativeFunction>().unwrap())
             }
             ObjType::Closure => write!(fmt, "{}", self.downcast_ref::<Closure>().unwrap()),
+            ObjType::Class => write!(fmt, "{}", self.downcast_ref::<Class>().unwrap()),
+            ObjType::Instance => write!(fmt, "{}", self.downcast_ref::<Instance>().unwrap()),
         }
     }
 }
@@ -38,6 +43,7 @@ impl PartialEq for dyn Obj {
             return false;
         }
 
+        // TODO: is it correct to compare Function, Closure, Instance, etc. by value?
         match self.obj_type() {
             ObjType::String => {
                 return self.downcast_ref::<ObjString>() == other.downcast_ref::<ObjString>();
@@ -51,6 +57,12 @@ impl PartialEq for dyn Obj {
             }
             ObjType::Closure => {
                 return self.downcast_ref::<Closure>() == other.downcast_ref::<Closure>();
+            }
+            ObjType::Class => {
+                return self.downcast_ref::<Class>() == other.downcast_ref::<Class>();
+            }
+            ObjType::Instance => {
+                return self.downcast_ref::<Instance>() == other.downcast_ref::<Instance>();
             }
         }
     }

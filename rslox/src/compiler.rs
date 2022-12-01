@@ -40,7 +40,7 @@ impl Precedence {
 
 struct ParseRule {
     prefix: Option<fn(&mut Compiler, can_assign: bool) -> Result<()>>,
-    infix: Option<fn(&mut Compiler) -> Result<()>>,
+    infix: Option<fn(&mut Compiler, can_assign: bool) -> Result<()>>,
     precedence: Precedence,
 }
 
@@ -247,8 +247,8 @@ impl Compiler {
             },
             TokenKind::Dot => ParseRule {
                 prefix: None,
-                infix: None,
-                precedence: Precedence::None,
+                infix: Some(Compiler::dot),
+                precedence: Precedence::Call,
             },
             TokenKind::Minus => ParseRule {
                 prefix: Some(Compiler::unary),
@@ -440,7 +440,7 @@ impl Compiler {
             self.advance()?;
             let infix_rule = Self::get_rule(self.previous.kind).infix;
             match infix_rule {
-                Some(infix_rule) => infix_rule(self)?,
+                Some(infix_rule) => infix_rule(self, can_assign)?,
                 None => {
                     return self.error(r"Compiler internal error ¯\_(ツ)_/¯.");
                 }
@@ -558,7 +558,7 @@ impl Compiler {
         }
     }
 
-    fn binary(&mut self) -> Result<()> {
+    fn binary(&mut self, _can_assign: bool) -> Result<()> {
         let operator_type = self.previous.kind.clone();
         let rule = Compiler::get_rule(operator_type);
         self.parse_precedence(rule.precedence.next())?;
@@ -603,7 +603,9 @@ impl Compiler {
     }
 
     fn declaration(&mut self) -> Result<()> {
-        if self.match_token(TokenKind::Fun)? {
+        if self.match_token(TokenKind::Class)? {
+            self.class_declaration()
+        } else if self.match_token(TokenKind::Fun)? {
             self.fun_declaration()
         } else if self.match_token(TokenKind::Var)? {
             self.var_declaration()
@@ -864,7 +866,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn and(&mut self) -> Result<()> {
+    fn and(&mut self, _can_assign: bool) -> Result<()> {
         let end_jump = self.emit_jump(chunk::OpCode::JumpIfFalse);
 
         self.emit_byte(chunk::OpCode::Pop.u8());
@@ -873,7 +875,7 @@ impl Compiler {
         self.patch_jump(end_jump)
     }
 
-    fn or(&mut self) -> Result<()> {
+    fn or(&mut self, _can_assign: bool) -> Result<()> {
         let else_jump = self.emit_jump(chunk::OpCode::JumpIfFalse);
         let end_jump = self.emit_jump(chunk::OpCode::Jump);
 
@@ -1022,7 +1024,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn call(&mut self) -> Result<()> {
+    fn call(&mut self, _can_assign: bool) -> Result<()> {
         let arg_count = self.argument_list()?;
         self.emit_bytes(chunk::OpCode::Call.u8(), arg_count);
         Ok(())
@@ -1060,6 +1062,33 @@ impl Compiler {
             self.consume(TokenKind::Semicolon, "Expect ';' after return value.")?;
             self.emit_byte(chunk::OpCode::Return.u8());
         }
+        Ok(())
+    }
+
+    fn class_declaration(&mut self) -> Result<()> {
+        self.consume(TokenKind::Identifier, "Expect class name.")?;
+        let name_constant = self.identifier_constant(self.previous.lexeme.clone())?;
+        self.declare_variable()?;
+
+        self.emit_bytes(chunk::OpCode::Class.u8(), name_constant);
+        self.define_variable(name_constant);
+
+        self.consume(TokenKind::LeftBrace, "Expect '{' before class body.")?;
+        self.consume(TokenKind::RightBrace, "Expect '}' after class body.")?;
+        Ok(())
+    }
+
+    fn dot(&mut self, can_assign: bool) -> Result<()> {
+        self.consume(TokenKind::Identifier, "Expect property name after '.'.")?;
+        let name = self.identifier_constant(self.previous.lexeme.clone())?;
+
+        if can_assign && self.match_token(TokenKind::Equal)? {
+            self.expression()?;
+            self.emit_bytes(chunk::OpCode::SetProperty.u8(), name);
+        } else {
+            self.emit_bytes(chunk::OpCode::GetProperty.u8(), name);
+        }
+
         Ok(())
     }
 }

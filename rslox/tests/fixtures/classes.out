@@ -1,0 +1,12 @@
+# exit code: 0
+# stdout:
+Brioche
+Brioche instance
+"---"
+"grape"
+"gauda"
+"---"
+3
+
+# stderr:
+

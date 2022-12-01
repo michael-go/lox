@@ -181,7 +181,11 @@ impl RunCtx {
     fn call_value(&mut self, callee: &Value, arg_count: u8) -> Result<()> {
         match callee {
             Value::Obj(obj) => {
-                if let Ok(closure) = obj.clone().downcast_rc::<Closure>() {
+                if let Ok(class) = obj.clone().downcast_rc::<Class>() {
+                    let offset = self.stack.len() - arg_count as usize - 1;
+                    self.stack[offset] = Value::Obj(Rc::new(Instance::new(class.clone())));
+                    Ok(())
+                } else if let Ok(closure) = obj.clone().downcast_rc::<Closure>() {
                     self.call(closure, arg_count)
                 } else if let Some(native) = obj.downcast_ref::<NativeFunction>() {
                     let args = &self.stack[self.stack.len() - arg_count as usize..];
@@ -355,7 +359,6 @@ impl VM {
                 }
                 Some(OpCode::SetGlobal) => {
                     let name = ctx.read_constant().clone();
-
                     if let Value::Obj(obj) = name {
                         if let Some(name) = obj.downcast_ref::<ObjString>() {
                             if self.globals.contains_key(name) {
@@ -363,6 +366,80 @@ impl VM {
                             } else {
                                 return Err(ctx
                                     .runtime_error(&format!("Undefined variable '{}'.", name))
+                                    .into());
+                            }
+                        } else {
+                            return Err(ctx
+                                .runtime_error("internal error: expected variable name")
+                                .into());
+                        }
+                    } else {
+                        return Err(ctx
+                            .runtime_error("internal error: expected variable name")
+                            .into());
+                    }
+                }
+                Some(OpCode::GetProperty) => {
+                    // TODO: can we simplify this downcasting madness?
+                    let name = ctx.read_constant().clone();
+                    if let Value::Obj(name) = name {
+                        if let Some(name) = name.downcast_ref::<ObjString>() {
+                            let instance = ctx.pop();
+                            if let Value::Obj(instance) = instance {
+                                if let Some(instance) = instance.downcast_ref::<Instance>() {
+                                    if let Some(value) =
+                                        instance.fields.borrow().get(name.string.as_str())
+                                    {
+                                        ctx.push(value.clone());
+                                    } else {
+                                        return Err(ctx
+                                            .runtime_error(&format!(
+                                                "Undefined property '{}'.",
+                                                name
+                                            ))
+                                            .into());
+                                    }
+                                } else {
+                                    return Err(ctx
+                                        .runtime_error("Only instances have properties.")
+                                        .into());
+                                }
+                            } else {
+                                return Err(ctx
+                                    .runtime_error("Only instances have properties.")
+                                    .into());
+                            }
+                        } else {
+                            return Err(ctx
+                                .runtime_error("internal error: expected variable name")
+                                .into());
+                        }
+                    } else {
+                        return Err(ctx
+                            .runtime_error("internal error: expected variable name")
+                            .into());
+                    }
+                }
+                Some(OpCode::SetProperty) => {
+                    let name_const = ctx.read_constant().clone();
+                    if let Value::Obj(name_obj) = name_const {
+                        if let Some(name) = name_obj.downcast_ref::<ObjString>() {
+                            let value = ctx.pop();
+                            if let Value::Obj(obj) = ctx.pop() {
+                                if let Some(instance) = obj.downcast_ref::<Instance>() {
+                                    instance
+                                        .fields
+                                        .borrow_mut()
+                                        .insert(name.string.clone(), value.clone());
+                                    ctx.push(value);
+                                } else {
+                                    return Err(ctx
+                                        .runtime_error("Only instances have fields.")
+                                        .into());
+                                }
+                            } else {
+                                return Err(ctx
+                                    .runtime_error("Only instances have fields.")
                                     .into());
                             }
                         } else {
@@ -534,6 +611,21 @@ impl VM {
 
                     ctx.stack.truncate(current_frame_base);
                     ctx.push(result);
+                }
+                Some(OpCode::Class) => {
+                    let name = ctx.read_constant();
+                    if let Value::Obj(obj) = name {
+                        if let Some(name) = obj.downcast_ref::<ObjString>() {
+                            let class = Class::new(name.clone());
+                            ctx.push(Value::Obj(Rc::new(class)));
+                        } else {
+                            return Err(ctx
+                                .runtime_error("internal error: expected string")
+                                .into());
+                        }
+                    } else {
+                        return Err(ctx.runtime_error("internal error: expected string").into());
+                    }
                 }
                 None => {
                     return Err(ctx.runtime_error("Unknown opcode.").into());

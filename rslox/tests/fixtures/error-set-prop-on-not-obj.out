@@ -1,0 +1,7 @@
+# exit code: 65
+# stdout:
+
+# stderr:
+Runtime error: Only instances have fields.
+[line 2] in <script>
+
