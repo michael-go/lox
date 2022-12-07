@@ -1,0 +1,5 @@
+print this; // At top level.
+
+fun notMethod() {
+  print this; // In a function.
+} // TODO: getting an error also about this being unexpected.

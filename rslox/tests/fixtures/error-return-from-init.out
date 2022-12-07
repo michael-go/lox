@@ -1,0 +1,7 @@
+# exit code: 65
+# stdout:
+
+# stderr:
+[line 4] Error at 'return': Can't return a value from an initializer.
+[line 5] Error at '}': Expect expression.
+

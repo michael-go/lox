@@ -35,10 +35,12 @@ pub enum OpCode {
     JumpIfFalse,
     Loop,
     Call,
+    Invoke,
     Closure,
     CloseUpvalue,
     Return,
     Class,
+    Method,
 }
 
 impl OpCode {
@@ -134,6 +136,7 @@ impl Chunk {
             }
             Some(OpCode::Loop) => self.dissasemble_jump_instruction("Loop", -1, offset),
             Some(OpCode::Call) => self.dissasemble_byte_instruction("Call", offset),
+            Some(OpCode::Invoke) => self.dissasemble_invoke_instruction("Invoke", offset),
             Some(OpCode::Closure) => {
                 let constant = self.code[offset + 1];
                 print!("{:16} {:04} ", "Closure", constant);
@@ -164,6 +167,7 @@ impl Chunk {
             }
             Some(OpCode::Return) => self.dissasemble_simple_instruction("Return", offset),
             Some(OpCode::Class) => self.dissasemble_constant_instruction("Class", offset),
+            Some(OpCode::Method) => self.dissasemble_constant_instruction("Method", offset),
             None => {
                 println!("Unknown opcode {}", instruction);
                 offset + 1
@@ -197,6 +201,19 @@ impl Chunk {
             name,
             offset,
             offset as i32 + 3 + (sign * (jump as i32))
+        );
+        offset + 3
+    }
+
+    fn dissasemble_invoke_instruction(&self, name: &str, offset: usize) -> usize {
+        let constant = self.code[offset + 1];
+        let arg_count = self.code[offset + 2];
+        println!(
+            "{:16} ({:04}) {:4} '{}'",
+            name,
+            constant,
+            arg_count,
+            self.constants.get(constant as usize).unwrap()
         );
         offset + 3
     }

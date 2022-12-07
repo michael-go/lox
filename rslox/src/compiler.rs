@@ -51,9 +51,11 @@ struct Local {
     is_captured: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum FunctionType {
     Function,
+    Initializer,
+    Method,
     Script,
 }
 
@@ -83,8 +85,12 @@ impl CompilationUnit {
         let mut locals = Vec::<Local>::with_capacity((u8::MAX as usize) + 1);
         locals.push(Local {
             name: scanner::Token {
-                kind: TokenKind::Eof,
-                lexeme: String::new(),
+                kind: TokenKind::Identifier,
+                lexeme: if function_type != FunctionType::Function {
+                    "this".to_string()
+                } else {
+                    "".to_string()
+                },
                 line: 0,
             },
             depth: 0,
@@ -162,6 +168,11 @@ impl CompilationUnit {
     }
 }
 
+#[derive(Clone)]
+struct ClassCompiler {
+    enclosing: Box<Option<ClassCompiler>>,
+}
+
 struct Compiler {
     ran: bool,
 
@@ -169,8 +180,10 @@ struct Compiler {
     current: scanner::Token,
     previous: scanner::Token,
 
-    // TODO: this might need be a pointer
+    // TODO: these might need be a pointer
+    //  - in the book it's pointers to the stack, no heap allocation
     comp_unit: CompilationUnit,
+    class_compiler: Option<ClassCompiler>,
 }
 
 impl Compiler {
@@ -191,6 +204,7 @@ impl Compiler {
             previous: EOF.clone(),
 
             comp_unit: CompilationUnit::new(FunctionType::Script, None, None),
+            class_compiler: None,
         }
     }
 
@@ -391,7 +405,7 @@ impl Compiler {
                 precedence: Precedence::None,
             },
             TokenKind::This => ParseRule {
-                prefix: None,
+                prefix: Some(Compiler::this),
                 infix: None,
                 precedence: Precedence::None,
             },
@@ -516,7 +530,11 @@ impl Compiler {
     }
 
     fn emit_return(&mut self) {
-        self.emit_byte(chunk::OpCode::Nil.u8());
+        if self.comp_unit.function_type == FunctionType::Initializer {
+            self.emit_bytes(chunk::OpCode::GetLocal.u8(), 0)
+        } else {
+            self.emit_byte(chunk::OpCode::Nil.u8());
+        }
         self.emit_byte(chunk::OpCode::Return.u8());
     }
 
@@ -1058,6 +1076,10 @@ impl Compiler {
         if self.match_token(TokenKind::Semicolon)? {
             self.emit_return();
         } else {
+            if self.comp_unit.function_type == FunctionType::Initializer {
+                return self.error("Can't return a value from an initializer.");
+            }
+
             self.expression()?;
             self.consume(TokenKind::Semicolon, "Expect ';' after return value.")?;
             self.emit_byte(chunk::OpCode::Return.u8());
@@ -1067,14 +1089,30 @@ impl Compiler {
 
     fn class_declaration(&mut self) -> Result<()> {
         self.consume(TokenKind::Identifier, "Expect class name.")?;
-        let name_constant = self.identifier_constant(self.previous.lexeme.clone())?;
+        let class_name = self.previous.lexeme.clone();
+        let name_constant = self.identifier_constant(class_name.clone())?;
         self.declare_variable()?;
 
         self.emit_bytes(chunk::OpCode::Class.u8(), name_constant);
         self.define_variable(name_constant);
 
+        let class_compiler = ClassCompiler {
+            enclosing: Box::new(self.class_compiler.clone()),
+        };
+        self.class_compiler = Some(class_compiler);
+
+        self.named_variable(class_name, false)?;
+
         self.consume(TokenKind::LeftBrace, "Expect '{' before class body.")?;
+        while !self.check(TokenKind::RightBrace) && !self.check(TokenKind::Eof) {
+            self.method()?;
+        }
         self.consume(TokenKind::RightBrace, "Expect '}' after class body.")?;
+        self.emit_byte(chunk::OpCode::Pop.u8());
+
+        // TODO: try to simplify this
+        let enclosing = self.class_compiler.as_ref().unwrap().enclosing.as_ref();
+        self.class_compiler = enclosing.clone();
         Ok(())
     }
 
@@ -1085,11 +1123,36 @@ impl Compiler {
         if can_assign && self.match_token(TokenKind::Equal)? {
             self.expression()?;
             self.emit_bytes(chunk::OpCode::SetProperty.u8(), name);
+        } else if self.match_token(TokenKind::LeftParen)? {
+            let arg_count = self.argument_list()?;
+            self.emit_bytes(chunk::OpCode::Invoke.u8(), name);
+            self.emit_byte(arg_count);
         } else {
             self.emit_bytes(chunk::OpCode::GetProperty.u8(), name);
         }
 
         Ok(())
+    }
+
+    fn method(&mut self) -> Result<()> {
+        self.consume(TokenKind::Identifier, "Expect method name.")?;
+        let name_constant = self.identifier_constant(self.previous.lexeme.clone())?;
+        let mut func_type = FunctionType::Method;
+        if self.previous.lexeme == "init" {
+            func_type = FunctionType::Initializer;
+        }
+        self.function(func_type)?;
+        self.emit_bytes(chunk::OpCode::Method.u8(), name_constant);
+
+        Ok(())
+    }
+
+    fn this(&mut self, _can_assign: bool) -> Result<()> {
+        if self.class_compiler.is_none() {
+            return self.error("Cannot use 'this' outside of a class.");
+        }
+
+        self.variable(false)
     }
 }
 
