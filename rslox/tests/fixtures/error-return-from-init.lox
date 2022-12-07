@@ -1,0 +1,8 @@
+class CoffeeMaker {
+  init(coffee) {
+     this.coffee = coffee;
+     return coffee;
+  }
+}
+
+print CoffeeMaker("coffee and chicory");

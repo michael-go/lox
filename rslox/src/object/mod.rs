@@ -15,6 +15,7 @@ pub enum ObjType {
     Closure,
     Class,
     Instance,
+    BoundMethod,
 }
 
 pub trait Obj: Downcast {
@@ -33,6 +34,7 @@ impl std::fmt::Display for dyn Obj {
             ObjType::Closure => write!(fmt, "{}", self.downcast_ref::<Closure>().unwrap()),
             ObjType::Class => write!(fmt, "{}", self.downcast_ref::<Class>().unwrap()),
             ObjType::Instance => write!(fmt, "{}", self.downcast_ref::<Instance>().unwrap()),
+            ObjType::BoundMethod => write!(fmt, "{}", self.downcast_ref::<BoundMethod>().unwrap()),
         }
     }
 }
@@ -63,6 +65,9 @@ impl PartialEq for dyn Obj {
             }
             ObjType::Instance => {
                 return self.downcast_ref::<Instance>() == other.downcast_ref::<Instance>();
+            }
+            ObjType::BoundMethod => {
+                return self.downcast_ref::<BoundMethod>() == other.downcast_ref::<BoundMethod>();
             }
         }
     }

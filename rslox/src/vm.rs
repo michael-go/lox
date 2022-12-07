@@ -70,6 +70,7 @@ struct RunCtx {
     frames: ArrayVec<CallFrame, FRAMES_MAX>,
     stack: ArrayVec<Value, STACK_MAX>,
     open_upvalues: LinkedList<Rc<RefCell<Upvalue>>>,
+    init_string: ObjString,
 }
 
 impl RunCtx {
@@ -78,6 +79,7 @@ impl RunCtx {
             frames: ArrayVec::new(),
             stack: ArrayVec::new(),
             open_upvalues: LinkedList::new(),
+            init_string: ObjString::new("init".to_string()),
         }
     }
 
@@ -181,9 +183,20 @@ impl RunCtx {
     fn call_value(&mut self, callee: &Value, arg_count: u8) -> Result<()> {
         match callee {
             Value::Obj(obj) => {
-                if let Ok(class) = obj.clone().downcast_rc::<Class>() {
+                if let Ok(bound_method) = obj.clone().downcast_rc::<BoundMethod>() {
+                    let this_offset = self.stack.len() - arg_count as usize - 1;
+                    self.stack[this_offset] = bound_method.receiver.clone();
+                    return self.call(bound_method.method.clone(), arg_count);
+                } else if let Ok(class) = obj.clone().downcast_rc::<Class>() {
                     let offset = self.stack.len() - arg_count as usize - 1;
                     self.stack[offset] = Value::Obj(Rc::new(Instance::new(class.clone())));
+                    if let Some(initializer) = class.methods.borrow().get(&self.init_string) {
+                        self.call(initializer.clone(), arg_count)?;
+                    } else if arg_count > 0 {
+                        return Err(self
+                            .runtime_error(&format!("Expected 0 arguments but got {}", arg_count))
+                            .into());
+                    }
                     Ok(())
                 } else if let Ok(closure) = obj.clone().downcast_rc::<Closure>() {
                     self.call(closure, arg_count)
@@ -247,6 +260,85 @@ impl RunCtx {
             cursor.remove_current();
         }
         Ok(())
+    }
+
+    fn define_method(&mut self, name: &ObjString) -> Result<()> {
+        if let Value::Obj(obj) = self.peek(1) {
+            //TODO: the else brances should be unreachable as we trust the compiler
+            if let Ok(class) = obj.clone().downcast_rc::<Class>() {
+                let method = self.peek(0);
+                if let Value::Obj(obj) = method {
+                    if let Ok(closure) = obj.clone().downcast_rc::<Closure>() {
+                        class.methods.borrow_mut().insert(name.clone(), closure);
+                        self.pop();
+                    } else {
+                        return Err(self
+                            .runtime_error("internal error: Expected a function.")
+                            .into());
+                    }
+                } else {
+                    return Err(self
+                        .runtime_error("internal error: Expected a function.")
+                        .into());
+                }
+            } else {
+                return Err(self
+                    .runtime_error("internal error: Expected a class.")
+                    .into());
+            }
+        } else {
+            return Err(self.runtime_error("Only classes have methods.").into());
+        }
+        Ok(())
+    }
+
+    fn bind_method(&mut self, class: &Rc<Class>, name: &ObjString) -> Result<()> {
+        if let Some(method) = class.methods.borrow().get(name) {
+            let bound_method = Value::Obj(Rc::new(BoundMethod::new(
+                self.peek(0).clone(),
+                method.clone(),
+            )));
+            self.pop();
+            self.push(bound_method);
+            Ok(())
+        } else {
+            Err(self
+                .runtime_error(&format!("Undefined method/property '{}'.", name))
+                .into())
+        }
+    }
+
+    fn invoke(&mut self, name: &ObjString, arg_count: u8) -> Result<()> {
+        if let Value::Obj(reciever) = self.peek(arg_count as usize) {
+            if let Ok(instance) = reciever.clone().downcast_rc::<Instance>() {
+                if let Some(field) = instance.fields.borrow().get(name) {
+                    // expecting a callable field here
+                    let stack_offset = self.stack.len() - arg_count as usize - 1;
+                    self.stack[stack_offset] = field.clone();
+                    self.call_value(field, arg_count)
+                } else {
+                    self.invoke_from_class(&instance.class, name, arg_count)
+                }
+            } else {
+                Err(self
+                    .runtime_error("Only instances have methods/properties.")
+                    .into())
+            }
+        } else {
+            Err(self
+                .runtime_error("Only instances have methods/properties.")
+                .into())
+        }
+    }
+
+    fn invoke_from_class(&mut self, class: &Class, name: &ObjString, arg_count: u8) -> Result<()> {
+        if let Some(method) = class.methods.borrow().get(name) {
+            self.call(method.clone(), arg_count)
+        } else {
+            Err(self
+                .runtime_error(&format!("Undefined method '{}'.", name))
+                .into())
+        }
     }
 }
 
@@ -384,18 +476,13 @@ impl VM {
                     let name = ctx.read_constant().clone();
                     if let Value::Obj(name) = name {
                         if let Some(name) = name.downcast_ref::<ObjString>() {
-                            let instance = ctx.pop();
-                            if let Value::Obj(instance) = instance {
+                            if let Value::Obj(instance) = ctx.peek(0).clone() {
                                 if let Some(instance) = instance.downcast_ref::<Instance>() {
                                     if let Some(value) = instance.fields.borrow().get(name) {
+                                        ctx.pop();
                                         ctx.push(value.clone());
                                     } else {
-                                        return Err(ctx
-                                            .runtime_error(&format!(
-                                                "Undefined property '{}'.",
-                                                name
-                                            ))
-                                            .into());
+                                        ctx.bind_method(&instance.class, name)?;
                                     }
                                 } else {
                                     return Err(ctx
@@ -560,6 +647,19 @@ impl VM {
                     let val = ctx.peek(arg_count as usize).clone();
                     ctx.call_value(&val, arg_count)?;
                 }
+                Some(OpCode::Invoke) => {
+                    let method_constant = ctx.read_constant().clone();
+                    let arg_count = ctx.read_byte();
+                    if let Value::Obj(obj) = method_constant {
+                        if let Some(method) = obj.downcast_ref::<ObjString>() {
+                            ctx.invoke(method, arg_count)?;
+                        } else {
+                            return Err(ctx.runtime_error("Expected method name.").into());
+                        }
+                    } else {
+                        return Err(ctx.runtime_error("Expected method name.").into());
+                    }
+                }
                 Some(OpCode::Closure) => {
                     let constant = ctx.read_constant();
                     if let Value::Obj(obj) = constant {
@@ -616,6 +716,20 @@ impl VM {
                         if let Some(name) = obj.downcast_ref::<ObjString>() {
                             let class = Class::new(name.clone());
                             ctx.push(Value::Obj(Rc::new(class)));
+                        } else {
+                            return Err(ctx
+                                .runtime_error("internal error: expected string")
+                                .into());
+                        }
+                    } else {
+                        return Err(ctx.runtime_error("internal error: expected string").into());
+                    }
+                }
+                Some(OpCode::Method) => {
+                    let name_constant = ctx.read_constant().clone();
+                    if let Value::Obj(obj) = name_constant {
+                        if let Some(name) = obj.downcast_ref::<ObjString>() {
+                            ctx.define_method(name)?;
                         } else {
                             return Err(ctx
                                 .runtime_error("internal error: expected string")

@@ -1,0 +1,47 @@
+class Scone {
+  topping(first, second) {
+    print "scone with " + first + " and " + second;
+  }
+}
+
+var scone = Scone();
+scone.topping("berries", "cream");
+
+print "/////";
+
+class Nested {
+  method() {
+    print "`this` in method:";
+    print this;
+
+    fun function() {
+      print "`this` in nested function:";
+      print this;
+    }
+
+    function();
+  }
+}
+
+Nested().method();
+
+print "/////";
+
+class Counter {
+  init() {
+    this.count = 0;
+  }
+
+  up() {
+    this.count = this.count + 1;
+  }
+
+  print_current() {
+    print this.count;
+  }
+}
+
+var counter = Counter();
+counter.up();
+counter.up();
+counter.print_current();
