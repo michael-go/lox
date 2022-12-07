@@ -416,126 +416,62 @@ impl VM {
                         ctx.peek(0).clone();
                 }
                 Some(OpCode::GetGlobal) => {
-                    let name_obj = ctx.read_constant();
-                    if let Value::Obj(obj) = name_obj {
-                        if let Some(name) = obj.downcast_ref::<ObjString>() {
-                            let value = self.globals.get(name).unwrap_or(&Value::Nil);
-                            ctx.push(value.clone());
-                        } else {
-                            return Err(ctx
-                                .runtime_error("internal error: expected variable name")
-                                .into());
-                        }
-                    } else {
-                        return Err(ctx
-                            .runtime_error("internal error: expected variable name")
-                            .into());
-                    }
+                    let name = Self::as_objstring(ctx.read_constant()).unwrap();
+                    let value = self.globals.get(name).unwrap_or(&Value::Nil);
+                    ctx.push(value.clone());
                 }
                 Some(OpCode::DefineGlobal) => {
-                    let name = ctx.read_constant();
-                    if let Value::Obj(obj) = name {
-                        if let Some(name) = obj.downcast_ref::<ObjString>() {
-                            self.globals.insert(name.clone(), ctx.peek(0).clone());
-                            ctx.pop();
-                        } else {
-                            return Err(ctx
-                                .runtime_error("internal error: expected variable name")
-                                .into());
-                        }
-                    } else {
-                        return Err(ctx
-                            .runtime_error("internal error: expected variable name")
-                            .into());
-                    }
+                    let name = Self::as_objstring(ctx.read_constant()).unwrap();
+                    self.globals.insert(name.clone(), ctx.peek(0).clone());
+                    ctx.pop();
                 }
                 Some(OpCode::SetGlobal) => {
-                    let name = ctx.read_constant().clone();
-                    if let Value::Obj(obj) = name {
-                        if let Some(name) = obj.downcast_ref::<ObjString>() {
-                            if self.globals.contains_key(name) {
-                                self.globals.insert(name.clone(), ctx.peek(0).clone());
-                            } else {
-                                return Err(ctx
-                                    .runtime_error(&format!("Undefined variable '{}'.", name))
-                                    .into());
-                            }
-                        } else {
-                            return Err(ctx
-                                .runtime_error("internal error: expected variable name")
-                                .into());
-                        }
+                    let name_obj = ctx.read_constant().clone();
+                    let name = Self::as_objstring(&name_obj).unwrap();
+                    if self.globals.contains_key(name) {
+                        self.globals.insert(name.clone(), ctx.peek(0).clone());
                     } else {
                         return Err(ctx
-                            .runtime_error("internal error: expected variable name")
+                            .runtime_error(&format!("Undefined variable '{}'.", name))
                             .into());
                     }
                 }
                 Some(OpCode::GetProperty) => {
-                    // TODO: can we simplify this downcasting madness?
-                    let name = ctx.read_constant().clone();
-                    if let Value::Obj(name) = name {
-                        if let Some(name) = name.downcast_ref::<ObjString>() {
-                            if let Value::Obj(instance) = ctx.peek(0).clone() {
-                                if let Some(instance) = instance.downcast_ref::<Instance>() {
-                                    if let Some(value) = instance.fields.borrow().get(name) {
-                                        ctx.pop();
-                                        ctx.push(value.clone());
-                                    } else {
-                                        ctx.bind_method(&instance.class, name)?;
-                                    }
-                                } else {
-                                    return Err(ctx
-                                        .runtime_error("Only instances have properties.")
-                                        .into());
-                                }
+                    let name_obj = ctx.read_constant().clone();
+                    let name = Self::as_objstring(&name_obj).unwrap();
+                    if let Value::Obj(instance) = ctx.peek(0).clone() {
+                        if let Some(instance) = instance.downcast_ref::<Instance>() {
+                            if let Some(value) = instance.fields.borrow().get(name) {
+                                ctx.pop();
+                                ctx.push(value.clone());
                             } else {
-                                return Err(ctx
-                                    .runtime_error("Only instances have properties.")
-                                    .into());
+                                ctx.bind_method(&instance.class, name)?;
                             }
                         } else {
                             return Err(ctx
-                                .runtime_error("internal error: expected variable name")
+                                .runtime_error("Only instances have properties.")
                                 .into());
                         }
                     } else {
-                        return Err(ctx
-                            .runtime_error("internal error: expected variable name")
-                            .into());
+                        return Err(ctx.runtime_error("Only instances have properties.").into());
                     }
                 }
                 Some(OpCode::SetProperty) => {
-                    let name_const = ctx.read_constant().clone();
-                    if let Value::Obj(name_obj) = name_const {
-                        if let Some(name) = name_obj.downcast_ref::<ObjString>() {
-                            let value = ctx.pop();
-                            if let Value::Obj(obj) = ctx.pop() {
-                                if let Some(instance) = obj.downcast_ref::<Instance>() {
-                                    instance
-                                        .fields
-                                        .borrow_mut()
-                                        .insert(name.clone(), value.clone());
-                                    ctx.push(value);
-                                } else {
-                                    return Err(ctx
-                                        .runtime_error("Only instances have fields.")
-                                        .into());
-                                }
-                            } else {
-                                return Err(ctx
-                                    .runtime_error("Only instances have fields.")
-                                    .into());
-                            }
+                    let name_obj = ctx.read_constant().clone();
+                    let name = Self::as_objstring(&name_obj).unwrap();
+                    let value = ctx.pop();
+                    if let Value::Obj(obj) = ctx.pop() {
+                        if let Some(instance) = obj.downcast_ref::<Instance>() {
+                            instance
+                                .fields
+                                .borrow_mut()
+                                .insert(name.clone(), value.clone());
+                            ctx.push(value);
                         } else {
-                            return Err(ctx
-                                .runtime_error("internal error: expected variable name")
-                                .into());
+                            return Err(ctx.runtime_error("Only instances have fields.").into());
                         }
                     } else {
-                        return Err(ctx
-                            .runtime_error("internal error: expected variable name")
-                            .into());
+                        return Err(ctx.runtime_error("Only instances have fields.").into());
                     }
                 }
                 Some(OpCode::GetUpvalue) => {
@@ -650,15 +586,8 @@ impl VM {
                 Some(OpCode::Invoke) => {
                     let method_constant = ctx.read_constant().clone();
                     let arg_count = ctx.read_byte();
-                    if let Value::Obj(obj) = method_constant {
-                        if let Some(method) = obj.downcast_ref::<ObjString>() {
-                            ctx.invoke(method, arg_count)?;
-                        } else {
-                            return Err(ctx.runtime_error("Expected method name.").into());
-                        }
-                    } else {
-                        return Err(ctx.runtime_error("Expected method name.").into());
-                    }
+                    let method_name = Self::as_objstring(&method_constant).unwrap();
+                    ctx.invoke(method_name, arg_count)?;
                 }
                 Some(OpCode::Closure) => {
                     let constant = ctx.read_constant();
@@ -711,38 +640,31 @@ impl VM {
                     ctx.push(result);
                 }
                 Some(OpCode::Class) => {
-                    let name = ctx.read_constant();
-                    if let Value::Obj(obj) = name {
-                        if let Some(name) = obj.downcast_ref::<ObjString>() {
-                            let class = Class::new(name.clone());
-                            ctx.push(Value::Obj(Rc::new(class)));
-                        } else {
-                            return Err(ctx
-                                .runtime_error("internal error: expected string")
-                                .into());
-                        }
-                    } else {
-                        return Err(ctx.runtime_error("internal error: expected string").into());
-                    }
+                    let name = Self::as_objstring(ctx.read_constant()).unwrap();
+                    let class = Class::new(name.clone());
+                    ctx.push(Value::Obj(Rc::new(class)));
                 }
                 Some(OpCode::Method) => {
                     let name_constant = ctx.read_constant().clone();
-                    if let Value::Obj(obj) = name_constant {
-                        if let Some(name) = obj.downcast_ref::<ObjString>() {
-                            ctx.define_method(name)?;
-                        } else {
-                            return Err(ctx
-                                .runtime_error("internal error: expected string")
-                                .into());
-                        }
-                    } else {
-                        return Err(ctx.runtime_error("internal error: expected string").into());
-                    }
+                    let name = Self::as_objstring(&name_constant).unwrap();
+                    ctx.define_method(name)?;
                 }
                 None => {
                     return Err(ctx.runtime_error("Unknown opcode.").into());
                 }
             }
+        }
+    }
+
+    fn as_objstring<'a>(value: &'a Value) -> Option<&'a ObjString> {
+        if let Value::Obj(obj) = value {
+            if let Some(obj_string) = obj.downcast_ref::<ObjString>() {
+                Some(obj_string)
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 
