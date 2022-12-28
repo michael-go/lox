@@ -1,6 +1,6 @@
 use hashbrown::HashMap;
 
-#[derive(PartialEq)]
+#[derive(Clone,PartialEq)]
 pub struct Class {
     name: ObjString,
     pub methods: RefCell<HashMap<ObjString, Rc<Closure>>>,

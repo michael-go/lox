@@ -498,6 +498,15 @@ impl VM {
                         ctx.stack[location] = value
                     }
                 }
+                Some(OpCode::GetSuper) => {
+                    let name_obj = ctx.read_constant().clone();
+                    let name = Self::as_objstring(&name_obj).unwrap();
+
+                    let superclass_value = ctx.pop();
+                    let superclass = Self::as_class(&superclass_value).unwrap();
+
+                    ctx.bind_method(&Rc::new(superclass.clone()), name)?;
+                }
                 Some(OpCode::Equal) => {
                     let b = ctx.pop();
                     let a = ctx.pop();
@@ -644,6 +653,20 @@ impl VM {
                     let class = Class::new(name.clone());
                     ctx.push(Value::Obj(Rc::new(class)));
                 }
+                Some(OpCode::Inherit) => {
+                    if let Some(superclass) = Self::as_class(ctx.peek(1)) {
+                        let subclass = Self::as_class(ctx.peek(0)).unwrap();
+                        for (name, method) in superclass.methods.borrow().iter() {
+                            subclass
+                                .methods
+                                .borrow_mut()
+                                .insert(name.clone(), method.clone());
+                        }
+                        ctx.pop(); // Subclass.
+                    } else {
+                        return Err(ctx.runtime_error("Superclass must be a class.").into());
+                    }
+                }
                 Some(OpCode::Method) => {
                     let name_constant = ctx.read_constant().clone();
                     let name = Self::as_objstring(&name_constant).unwrap();
@@ -660,6 +683,18 @@ impl VM {
         if let Value::Obj(obj) = value {
             if let Some(obj_string) = obj.downcast_ref::<ObjString>() {
                 Some(obj_string)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn as_class<'a>(value: &'a Value) -> Option<&'a Class> {
+        if let Value::Obj(obj) = value {
+            if let Some(class) = obj.downcast_ref::<Class>() {
+                Some(class)
             } else {
                 None
             }

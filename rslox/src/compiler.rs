@@ -171,6 +171,7 @@ impl CompilationUnit {
 #[derive(Clone)]
 struct ClassCompiler {
     enclosing: Box<Option<ClassCompiler>>,
+    has_superclass: bool,
 }
 
 struct Compiler {
@@ -400,7 +401,7 @@ impl Compiler {
                 precedence: Precedence::None,
             },
             TokenKind::Super => ParseRule {
-                prefix: None,
+                prefix: Some(Compiler::super_),
                 infix: None,
                 precedence: Precedence::None,
             },
@@ -1098,8 +1099,26 @@ impl Compiler {
 
         let class_compiler = ClassCompiler {
             enclosing: Box::new(self.class_compiler.clone()),
+            has_superclass: false,
         };
         self.class_compiler = Some(class_compiler);
+
+        if self.match_token(TokenKind::Less)? {
+            self.consume(TokenKind::Identifier, "Expect superclass name.")?;
+            self.variable(false)?;
+
+            if class_name == self.previous.lexeme {
+                return self.error("A class can't inherit from itself.");
+            }
+
+            self.begin_scope();
+            self.add_local(synthetic_token("super"))?;
+            self.define_variable(0);
+
+            self.named_variable(class_name.clone(), false)?;
+            self.emit_byte(chunk::OpCode::Inherit.u8());
+            self.class_compiler.as_mut().unwrap().has_superclass = true;
+        }
 
         self.named_variable(class_name, false)?;
 
@@ -1109,6 +1128,10 @@ impl Compiler {
         }
         self.consume(TokenKind::RightBrace, "Expect '}' after class body.")?;
         self.emit_byte(chunk::OpCode::Pop.u8());
+
+        if self.class_compiler.as_ref().unwrap().has_superclass {
+            self.end_scope();
+        }
 
         // TODO: try to simplify this
         let enclosing = self.class_compiler.as_ref().unwrap().enclosing.as_ref();
@@ -1154,6 +1177,23 @@ impl Compiler {
 
         self.variable(false)
     }
+
+    fn super_(&mut self, _can_assign: bool) -> Result<()> {
+        if self.class_compiler.is_none() {
+            return self.error("Cannot use 'super' outside of a class.");
+        } else if !self.class_compiler.as_ref().unwrap().has_superclass {
+            return self.error("Cannot use 'super' in a class with no superclass.");
+        }
+
+        self.consume(TokenKind::Dot, "Expect '.' after 'super'.")?;
+        self.consume(TokenKind::Identifier, "Expect superclass method name.")?;
+        let name = self.identifier_constant(self.previous.lexeme.clone())?;
+
+        self.named_variable("this".to_string(), false)?;
+        self.named_variable("super".to_string(), false)?;
+        self.emit_bytes(chunk::OpCode::GetSuper.u8(), name);
+        Ok(())
+    }
 }
 
 fn error_at(token: &scanner::Token, message: &str) -> Result<()> {
@@ -1169,4 +1209,12 @@ fn error_at(token: &scanner::Token, message: &str) -> Result<()> {
 
     eprintln!(": {}", message);
     Err(anyhow::anyhow!("Compiler error"))
+}
+
+fn synthetic_token(lexeme: &str) -> scanner::Token {
+    scanner::Token {
+        kind: scanner::TokenKind::Identifier,
+        lexeme: lexeme.to_string(),
+        line: 0,
+    }
 }

@@ -1,0 +1,8 @@
+# exit code: 0
+# stdout:
+"A method"
+"/////"
+"X"
+
+# stderr:
+

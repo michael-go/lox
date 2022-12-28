@@ -1,0 +1,36 @@
+class A {
+  method() {
+    print "A method";
+  }
+}
+
+class B < A {
+  method() {
+    print "B method";
+  }
+
+  test() {
+    super.method();
+  }
+}
+
+class C < B {}
+
+C().test();
+
+print("/////");
+
+class X {
+  method() {
+    print "X";
+  }
+}
+
+class Y < X {
+  method() {
+    var closure = super.method;
+    closure(); // Prints "X".
+  }
+}
+
+Y().method();

@@ -21,6 +21,7 @@ pub enum OpCode {
     SetProperty,
     GetUpvalue,
     SetUpvalue,
+    GetSuper,
     Equal,
     Greater,
     Less,
@@ -40,6 +41,7 @@ pub enum OpCode {
     CloseUpvalue,
     Return,
     Class,
+    Inherit,
     Method,
 }
 
@@ -120,6 +122,7 @@ impl Chunk {
             }
             Some(OpCode::GetUpvalue) => self.dissasemble_byte_instruction("GetUpvalue", offset),
             Some(OpCode::SetUpvalue) => self.dissasemble_byte_instruction("SetUpvalue", offset),
+            Some(OpCode::GetSuper) => self.dissasemble_constant_instruction("GetSuper", offset),
             Some(OpCode::Equal) => self.dissasemble_simple_instruction("Equal", offset),
             Some(OpCode::Greater) => self.dissasemble_simple_instruction("Greater", offset),
             Some(OpCode::Less) => self.dissasemble_simple_instruction("Less", offset),
@@ -167,6 +170,7 @@ impl Chunk {
             }
             Some(OpCode::Return) => self.dissasemble_simple_instruction("Return", offset),
             Some(OpCode::Class) => self.dissasemble_constant_instruction("Class", offset),
+            Some(OpCode::Inherit) => self.dissasemble_simple_instruction("Inherit", offset),
             Some(OpCode::Method) => self.dissasemble_constant_instruction("Method", offset),
             None => {
                 println!("Unknown opcode {}", instruction);
