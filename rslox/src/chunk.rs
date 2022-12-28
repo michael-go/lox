@@ -37,6 +37,7 @@ pub enum OpCode {
     Loop,
     Call,
     Invoke,
+    SuperInvoke,
     Closure,
     CloseUpvalue,
     Return,
@@ -140,6 +141,7 @@ impl Chunk {
             Some(OpCode::Loop) => self.dissasemble_jump_instruction("Loop", -1, offset),
             Some(OpCode::Call) => self.dissasemble_byte_instruction("Call", offset),
             Some(OpCode::Invoke) => self.dissasemble_invoke_instruction("Invoke", offset),
+            Some(OpCode::SuperInvoke) => self.dissasemble_invoke_instruction("SuperInvoke", offset),
             Some(OpCode::Closure) => {
                 let constant = self.code[offset + 1];
                 print!("{:16} {:04} ", "Closure", constant);

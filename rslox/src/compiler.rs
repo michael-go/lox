@@ -1190,8 +1190,16 @@ impl Compiler {
         let name = self.identifier_constant(self.previous.lexeme.clone())?;
 
         self.named_variable("this".to_string(), false)?;
-        self.named_variable("super".to_string(), false)?;
-        self.emit_bytes(chunk::OpCode::GetSuper.u8(), name);
+
+        if self.match_token(TokenKind::LeftParen)? {
+            let arg_count = self.argument_list()?;
+            self.named_variable("super".to_string(), false)?;
+            self.emit_bytes(chunk::OpCode::SuperInvoke.u8(), name);
+            self.emit_byte(arg_count);
+        } else {
+            self.named_variable("super".to_string(), false)?;
+            self.emit_bytes(chunk::OpCode::GetSuper.u8(), name);
+        }
         Ok(())
     }
 }

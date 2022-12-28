@@ -594,9 +594,17 @@ impl VM {
                 }
                 Some(OpCode::Invoke) => {
                     let method_constant = ctx.read_constant().clone();
-                    let arg_count = ctx.read_byte();
                     let method_name = Self::as_objstring(&method_constant).unwrap();
+                    let arg_count = ctx.read_byte();
                     ctx.invoke(method_name, arg_count)?;
+                }
+                Some(OpCode::SuperInvoke) => {
+                    let method_constant = ctx.read_constant().clone();
+                    let method_name = Self::as_objstring(&method_constant).unwrap();
+                    let arg_count = ctx.read_byte();
+                    let superclass_value = ctx.pop();
+                    let superclass = Self::as_class(&superclass_value).unwrap();
+                    ctx.invoke_from_class(superclass, method_name, arg_count)?;
                 }
                 Some(OpCode::Closure) => {
                     let constant = ctx.read_constant();
