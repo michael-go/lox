@@ -2,10 +2,10 @@
 # stdout:
 Brioche
 Brioche instance
-"---"
-"grape"
-"gauda"
-"---"
+---
+grape
+gauda
+---
 3
 
 # stderr:

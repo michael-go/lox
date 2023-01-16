@@ -1,13 +1,13 @@
 # exit code: 0
 # stdout:
-"# basic:"
-"outside"
-"# set in closure:"
-"updated"
-"# nested closures:"
-"return from outer"
-"create inner closure"
-"value"
+# basic:
+outside
+# set in closure:
+updated
+# nested closures:
+return from outer
+create inner closure
+value
 
 # stderr:
 

@@ -1,7 +1,7 @@
 # exit code: 0
 # stdout:
-"yes"
-"good"
+yes
+good
 
 # stderr:
 

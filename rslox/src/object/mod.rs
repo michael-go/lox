@@ -26,7 +26,7 @@ impl_downcast!(Obj);
 impl std::fmt::Display for dyn Obj {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.obj_type() {
-            ObjType::String => write!(fmt, "\"{}\"", self.downcast_ref::<ObjString>().unwrap()),
+            ObjType::String => write!(fmt, "{}", self.downcast_ref::<ObjString>().unwrap()),
             ObjType::Function => write!(fmt, "{}", self.downcast_ref::<Function>().unwrap()),
             ObjType::NativeFunction => {
                 write!(fmt, "{}", self.downcast_ref::<NativeFunction>().unwrap())

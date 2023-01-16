@@ -1,12 +1,12 @@
 # exit code: 0
 # stdout:
-"scone with berries and cream"
-"/////"
-"`this` in method:"
+scone with berries and cream
+/////
+`this` in method:
 Nested instance
-"`this` in nested function:"
+`this` in nested function:
 Nested instance
-"/////"
+/////
 2
 
 # stderr:
