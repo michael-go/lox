@@ -66,6 +66,13 @@ fn main() {
     }
 
     if res.is_err() {
-        std::process::exit(65);
+        match res.unwrap_err().downcast::<vm::LoxError>() {
+            Ok(e) => {
+                match e.kind {
+                    vm::LoxErrorKind::RuntimeError => std::process::exit(70),
+                }
+            },
+            Err(_) => std::process::exit(65),
+        }
     }
 }

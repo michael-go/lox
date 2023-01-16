@@ -1,7 +1,7 @@
-# exit code: 65
+# exit code: 70
 # stdout:
 
 # stderr:
-Runtime error: Undefined variable 'no_such_var'.
+Undefined variable 'no_such_var'.
 [line 1] in <script>
 

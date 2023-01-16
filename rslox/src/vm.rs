@@ -120,7 +120,7 @@ impl RunCtx {
     }
 
     fn runtime_error(&mut self, message: &str) -> LoxError {
-        eprintln!("Runtime error: {}", message);
+        eprintln!("{}", message);
 
         for frame in self.frames.iter().rev() {
             let line = frame.closure.function.chunk.lines[&(frame.ip - 1)];
@@ -194,7 +194,7 @@ impl RunCtx {
                         self.call(initializer.clone(), arg_count)?;
                     } else if arg_count > 0 {
                         return Err(self
-                            .runtime_error(&format!("Expected 0 arguments but got {}", arg_count))
+                            .runtime_error(&format!("Expected 0 arguments but got {}.", arg_count))
                             .into());
                     }
                     Ok(())

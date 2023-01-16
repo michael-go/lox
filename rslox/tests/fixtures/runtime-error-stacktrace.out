@@ -1,8 +1,8 @@
-# exit code: 65
+# exit code: 70
 # stdout:
 
 # stderr:
-Runtime error: Expected 0 arguments but got 2.
+Expected 0 arguments but got 2.
 [line 4] in <fn c>
 [line 2] in <fn b>
 [line 1] in <fn a>
