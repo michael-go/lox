@@ -4,5 +4,4 @@
 # stderr:
 [line 1] Error at 'this': Cannot use 'this' outside of a class.
 [line 4] Error at 'this': Cannot use 'this' outside of a class.
-[line 5] Error at '}': Expect expression.
 

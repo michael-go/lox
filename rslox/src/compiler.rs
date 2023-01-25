@@ -39,8 +39,8 @@ impl Precedence {
 }
 
 struct ParseRule {
-    prefix: Option<fn(&mut Compiler, can_assign: bool) -> Result<()>>,
-    infix: Option<fn(&mut Compiler, can_assign: bool) -> Result<()>>,
+    prefix: Option<fn(&mut Compiler, can_assign: bool)>,
+    infix: Option<fn(&mut Compiler, can_assign: bool)>,
     precedence: Precedence,
 }
 
@@ -63,6 +63,16 @@ enum FunctionType {
 struct Upvalue {
     index: u8,
     is_local: bool,
+}
+
+struct CompUnitError {
+    message: String,
+}
+
+impl CompUnitError {
+    fn new(message: String) -> CompUnitError {
+        CompUnitError { message }
+    }
 }
 
 #[derive(Clone)]
@@ -107,13 +117,14 @@ impl CompilationUnit {
         }
     }
 
-    fn resolve_local(&self, name: &str, token: &scanner::Token) -> Result<Option<u8>> {
+    fn resolve_local(&self, name: &str) -> Result<Option<u8>, CompUnitError> {
         // TODO: can assert that locals.len() < u8::MAX
         for i in (0..self.locals.len()).rev() {
             if self.locals[i].name.lexeme == name {
                 if self.locals[i].depth == -1 {
-                    return error_at(&token, "Can't read local variable in its own initializer.")
-                        .map(|_| None);
+                    return Err(CompUnitError::new(
+                        "Can't read local variable in its own initializer.".to_string(),
+                    ));
                 }
                 return Ok(Some(i as u8));
             }
@@ -122,34 +133,26 @@ impl CompilationUnit {
         Ok(None)
     }
 
-    fn resolve_upvalue(&mut self, name: &str, token: &scanner::Token) -> Result<Option<u8>> {
+    fn resolve_upvalue(&mut self, name: &str) -> Result<Option<u8>, CompUnitError> {
         if self.enclosing.is_none() {
             return Ok(None);
         }
 
-        let local = self
-            .enclosing
-            .as_ref()
-            .unwrap()
-            .resolve_local(name, token)?;
+        let local = self.enclosing.as_ref().unwrap().resolve_local(name)?;
         if let Some(local) = local {
             self.enclosing.as_mut().unwrap().locals[local as usize].is_captured = true;
-            return Ok(Some(self.add_upvalue(local, true, token)?));
+            return Ok(Some(self.add_upvalue(local, true)?));
         }
 
-        let upvalue = self
-            .enclosing
-            .as_mut()
-            .unwrap()
-            .resolve_upvalue(name, token)?;
+        let upvalue = self.enclosing.as_mut().unwrap().resolve_upvalue(name)?;
         if let Some(upvalue) = upvalue {
-            return Ok(Some(self.add_upvalue(upvalue, false, token)?));
+            return Ok(Some(self.add_upvalue(upvalue, false)?));
         }
 
         Ok(None)
     }
 
-    fn add_upvalue(&mut self, index: u8, is_local: bool, token: &scanner::Token) -> Result<u8> {
+    fn add_upvalue(&mut self, index: u8, is_local: bool) -> Result<u8, CompUnitError> {
         for i in 0..self.upvalues.len() {
             let upvalue = &self.upvalues[i];
             if upvalue.index == index && upvalue.is_local == is_local {
@@ -158,7 +161,9 @@ impl CompilationUnit {
         }
 
         if self.upvalues.len() == u8::MAX as usize {
-            return error_at(token, "Too many closure variables in function.").map(|_| 0);
+            return Err(CompUnitError::new(
+                "Too many closure variables in function.".to_string(),
+            ));
         }
 
         self.function.upvalue_count += 1;
@@ -176,6 +181,8 @@ struct ClassCompiler {
 
 struct Compiler {
     ran: bool,
+    had_error: bool,
+    panic_mode: bool,
 
     scanner: scanner::Scanner,
     current: scanner::Token,
@@ -199,6 +206,8 @@ impl Compiler {
         };
         Compiler {
             ran: false,
+            had_error: false,
+            panic_mode: false,
 
             scanner,
             current: EOF.clone(),
@@ -215,19 +224,13 @@ impl Compiler {
         }
         self.ran = true;
 
-        let mut had_error = false;
+        self.advance();
 
-        self.advance()?;
-
-        while !self.match_token(TokenKind::Eof)? {
-            let res = self.declaration();
-            if res.is_err() {
-                had_error = true;
-                self.synchronize()?;
-            }
+        while !self.match_token(TokenKind::Eof) {
+            self.declaration();
         }
 
-        if had_error {
+        if self.had_error {
             return Err(anyhow::anyhow!("Had compilation errors"));
         }
         Ok(self.end_comp_unit())
@@ -438,38 +441,37 @@ impl Compiler {
         }
     }
 
-    fn parse_precedence(&mut self, precedence: Precedence) -> Result<()> {
-        self.advance()?;
+    fn parse_precedence(&mut self, precedence: Precedence) {
+        self.advance();
 
         let can_assign = precedence.to_u8() <= Precedence::Assignment.to_u8();
 
         let prefix_rule = Self::get_rule(self.previous.kind).prefix;
         match prefix_rule {
-            Some(prefix_rule) => prefix_rule(self, can_assign)?,
+            Some(prefix_rule) => prefix_rule(self, can_assign),
             None => {
-                return self.error("Expect expression.");
+                self.error("Expect expression.");
+                return;
             }
         };
 
         while precedence.to_u8() <= Self::get_rule(self.current.kind).precedence.to_u8() {
-            self.advance()?;
+            self.advance();
             let infix_rule = Self::get_rule(self.previous.kind).infix;
             match infix_rule {
-                Some(infix_rule) => infix_rule(self, can_assign)?,
+                Some(infix_rule) => infix_rule(self, can_assign),
                 None => {
-                    return self.error(r"Compiler internal error ¯\_(ツ)_/¯.");
+                    self.error(r"Compiler internal error ¯\_(ツ)_/¯.");
                 }
             }
         }
 
-        if can_assign && self.match_token(TokenKind::Equal)? {
-            return self.error("Invalid assignment target");
+        if can_assign && self.match_token(TokenKind::Equal) {
+            self.error("Invalid assignment target");
         }
-
-        Ok(())
     }
 
-    fn advance(&mut self) -> Result<()> {
+    fn advance(&mut self) {
         self.previous = self.current.clone();
 
         loop {
@@ -478,29 +480,29 @@ impl Compiler {
                 break;
             }
 
-            return self.error_at_current(&self.current.lexeme);
+            self.error_at_current(&self.current.lexeme.clone());
         }
-        Ok(())
     }
 
-    fn expression(&mut self) -> Result<()> {
+    fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment)
     }
 
-    fn error_at_current(&self, message: &str) -> Result<()> {
-        error_at(&self.current, message)
+    fn error_at_current(&mut self, message: &str) {
+        self.error_at(&self.current.clone(), message);
     }
 
-    fn error(&self, message: &str) -> Result<()> {
-        error_at(&self.previous, message)
+    fn error(&mut self, message: &str) {
+        self.error_at(&self.previous.clone(), message);
     }
 
-    fn consume(&mut self, kind: scanner::TokenKind, message: &str) -> Result<()> {
+    fn consume(&mut self, kind: scanner::TokenKind, message: &str) {
         if self.current.kind == kind {
-            return self.advance();
+            self.advance();
+            return;
         }
 
-        self.error_at_current(message)
+        self.error_at_current(message);
     }
 
     fn current_chunk(&mut self) -> &mut chunk::Chunk {
@@ -539,48 +541,51 @@ impl Compiler {
         self.emit_byte(chunk::OpCode::Return.u8());
     }
 
-    fn number(&mut self, _can_assign: bool) -> Result<()> {
+    fn number(&mut self, _can_assign: bool) {
         let value = self.previous.lexeme.parse::<f64>().unwrap();
         self.emit_constant(Value::Number(value))
     }
 
-    fn emit_constant(&mut self, value: Value) -> Result<()> {
-        let constant = self.make_constant(value)?;
+    fn emit_constant(&mut self, value: Value) {
+        let constant = self.make_constant(value);
         self.emit_bytes(chunk::OpCode::Constant.u8(), constant);
-        Ok(())
     }
 
-    fn make_constant(&mut self, value: Value) -> Result<u8> {
-        self.current_chunk().add_constant(value)
+    fn make_constant(&mut self, value: Value) -> u8 {
+        let constant = self.current_chunk().add_constant(value);
+        if constant > u8::MAX as usize {
+            self.error("Too many constants in one chunk.");
+            return 0;
+        }
+        return constant as u8;
     }
 
-    fn grouping(&mut self, _can_assign: bool) -> Result<()> {
-        self.expression()?;
+    fn grouping(&mut self, _can_assign: bool) {
+        self.expression();
         self.consume(
             scanner::TokenKind::RightParen,
             "Expect ')' after expression.",
-        )?;
-        Ok(())
+        );
     }
 
-    fn unary(&mut self, _can_assign: bool) -> Result<()> {
+    fn unary(&mut self, _can_assign: bool) {
         let operator_type = self.previous.kind.clone();
 
         // Compile the operand.
-        self.parse_precedence(Precedence::Unary)?;
+        self.parse_precedence(Precedence::Unary);
 
         // Emit the operator instruction.
         match operator_type {
-            TokenKind::Minus => Ok(self.emit_byte(chunk::OpCode::Negate.u8())),
-            TokenKind::Bang => Ok(self.emit_byte(chunk::OpCode::Not.u8())),
-            _ => Err(anyhow::anyhow!("Internal compiler error")), // Unreachable.
+            TokenKind::Minus => self.emit_byte(chunk::OpCode::Negate.u8()),
+            TokenKind::Bang => self.emit_byte(chunk::OpCode::Not.u8()),
+            _ => panic!("Internal compiler error"), // Unreachable.
         }
     }
 
-    fn binary(&mut self, _can_assign: bool) -> Result<()> {
+    fn binary(&mut self, _can_assign: bool) {
         let operator_type = self.previous.kind.clone();
         let rule = Compiler::get_rule(operator_type);
-        self.parse_precedence(rule.precedence.next())?;
+        self.parse_precedence(rule.precedence.next());
 
         match operator_type {
             TokenKind::BangEqual => {
@@ -599,90 +604,92 @@ impl Compiler {
             TokenKind::Minus => self.emit_byte(chunk::OpCode::Subtract.u8()),
             TokenKind::Star => self.emit_byte(chunk::OpCode::Multiply.u8()),
             TokenKind::Slash => self.emit_byte(chunk::OpCode::Divide.u8()),
-            _ => return Err(anyhow::anyhow!("Internal compiler error")), // Unreachable.
+            _ => panic!("Internal compiler error"), // Unreachable.
         }
-        Ok(())
     }
 
-    fn literal(&mut self, _can_assign: bool) -> Result<()> {
+    fn literal(&mut self, _can_assign: bool) {
         match self.previous.kind {
             scanner::TokenKind::False => self.emit_byte(chunk::OpCode::False.u8()),
             scanner::TokenKind::Nil => self.emit_byte(chunk::OpCode::Nil.u8()),
             scanner::TokenKind::True => self.emit_byte(chunk::OpCode::True.u8()),
-            _ => return Err(anyhow::anyhow!("Internal compiler error")), // Unreachable.
+            _ => panic!("Internal compiler error"), // Unreachable.
         }
-        Ok(())
     }
 
-    fn string(&mut self, _can_assign: bool) -> Result<()> {
+    fn string(&mut self, _can_assign: bool) {
         let str_obj = Value::Obj(Rc::new(ObjString::new(
             self.previous.lexeme[1..self.previous.lexeme.len() - 1].to_string(),
         )));
         self.emit_constant(str_obj)
     }
 
-    fn declaration(&mut self) -> Result<()> {
-        if self.match_token(TokenKind::Class)? {
+    fn declaration(&mut self) {
+        if self.match_token(TokenKind::Class) {
             self.class_declaration()
-        } else if self.match_token(TokenKind::Fun)? {
+        } else if self.match_token(TokenKind::Fun) {
             self.fun_declaration()
-        } else if self.match_token(TokenKind::Var)? {
+        } else if self.match_token(TokenKind::Var) {
             self.var_declaration()
         } else {
             self.statement()
         }
+
+        if self.panic_mode {
+            self.synchronize();
+        }
     }
 
-    fn statement(&mut self) -> Result<()> {
-        if self.match_token(TokenKind::Print)? {
+    fn statement(&mut self) {
+        if self.match_token(TokenKind::Print) {
             self.print_statement()
-        } else if self.match_token(TokenKind::If)? {
+        } else if self.match_token(TokenKind::If) {
             self.if_statement()
-        } else if self.match_token(TokenKind::For)? {
+        } else if self.match_token(TokenKind::For) {
             self.for_statement()
-        } else if self.match_token(TokenKind::Return)? {
+        } else if self.match_token(TokenKind::Return) {
             self.return_statement()
-        } else if self.match_token(TokenKind::While)? {
+        } else if self.match_token(TokenKind::While) {
             self.while_statement()
-        } else if self.match_token(TokenKind::LeftBrace)? {
+        } else if self.match_token(TokenKind::LeftBrace) {
             self.begin_scope();
-            self.block()?;
-            Ok(self.end_scope())
+            self.block();
+            self.end_scope();
         } else {
             self.expression_statement()
         }
     }
 
-    fn match_token(&mut self, kind: scanner::TokenKind) -> Result<bool> {
+    fn match_token(&mut self, kind: scanner::TokenKind) -> bool {
         if !self.check(kind) {
-            return Ok(false);
+            return false;
         }
-        self.advance()?;
-        Ok(true)
+        self.advance();
+        true
     }
 
     fn check(&self, kind: scanner::TokenKind) -> bool {
         self.current.kind == kind
     }
 
-    fn print_statement(&mut self) -> Result<()> {
-        self.expression()?;
-        self.consume(scanner::TokenKind::Semicolon, "Expect ';' after value.")?;
+    fn print_statement(&mut self) {
+        self.expression();
+        self.consume(scanner::TokenKind::Semicolon, "Expect ';' after value.");
         self.emit_byte(chunk::OpCode::Print.u8());
-        Ok(())
     }
 
-    fn expression_statement(&mut self) -> Result<()> {
-        self.expression()?;
-        self.consume(scanner::TokenKind::Semicolon, "Expect ';' after value.")?;
+    fn expression_statement(&mut self) {
+        self.expression();
+        self.consume(scanner::TokenKind::Semicolon, "Expect ';' after value.");
         self.emit_byte(chunk::OpCode::Pop.u8());
-        Ok(())
     }
 
-    fn synchronize(&mut self) -> Result<()> {
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+
         while self.current.kind != scanner::TokenKind::Eof {
             if self.previous.kind == scanner::TokenKind::Semicolon {
-                return Ok(());
+                return;
             }
 
             match self.current.kind {
@@ -693,45 +700,42 @@ impl Compiler {
                 | scanner::TokenKind::If
                 | scanner::TokenKind::While
                 | scanner::TokenKind::Print
-                | scanner::TokenKind::Return => return Ok(()),
+                | scanner::TokenKind::Return => return,
                 _ => {}
             }
 
-            self.advance()?
+            self.advance()
         }
-
-        Ok(())
     }
 
-    fn var_declaration(&mut self) -> Result<()> {
-        let global = self.parse_variable("Expect variable name.")?;
+    fn var_declaration(&mut self) {
+        let global = self.parse_variable("Expect variable name.");
 
-        if self.match_token(scanner::TokenKind::Equal)? {
-            self.expression()?;
+        if self.match_token(scanner::TokenKind::Equal) {
+            self.expression();
         } else {
             self.emit_byte(chunk::OpCode::Nil.u8());
         }
         self.consume(
             scanner::TokenKind::Semicolon,
             "Expect ';' after variable declaration.",
-        )?;
+        );
 
         self.define_variable(global);
-        Ok(())
     }
 
-    fn parse_variable(&mut self, error_message: &str) -> Result<u8> {
-        self.consume(scanner::TokenKind::Identifier, error_message)?;
+    fn parse_variable(&mut self, error_message: &str) -> u8 {
+        self.consume(scanner::TokenKind::Identifier, error_message);
 
-        self.declare_variable()?;
+        self.declare_variable();
         if self.comp_unit.scope_depth > 0 {
-            return Ok(0);
+            return 0;
         }
 
         self.identifier_constant(self.previous.lexeme.clone())
     }
 
-    fn identifier_constant(&mut self, name: String) -> Result<u8> {
+    fn identifier_constant(&mut self, name: String) -> u8 {
         let str_obj = Value::Obj(Rc::new(ObjString::new(name)));
         self.make_constant(str_obj)
     }
@@ -745,9 +749,9 @@ impl Compiler {
         self.emit_bytes(chunk::OpCode::DefineGlobal.u8(), global);
     }
 
-    fn declare_variable(&mut self) -> Result<()> {
+    fn declare_variable(&mut self) {
         if self.comp_unit.scope_depth == 0 {
-            return Ok(());
+            return;
         }
 
         for local in self.comp_unit.locals.iter().rev() {
@@ -764,43 +768,50 @@ impl Compiler {
         self.add_local(name)
     }
 
-    fn variable(&mut self, can_assign: bool) -> Result<()> {
-        self.named_variable(self.previous.lexeme.clone(), can_assign)?;
-        Ok(())
+    fn variable(&mut self, can_assign: bool) {
+        self.named_variable(self.previous.lexeme.clone(), can_assign);
     }
 
-    fn named_variable(&mut self, name: String, can_assign: bool) -> Result<()> {
+    fn named_variable(&mut self, name: String, can_assign: bool) {
         let arg: u8;
 
         let get_op: chunk::OpCode;
         let set_op: chunk::OpCode;
 
-        if let Some(local_index) = self.comp_unit.resolve_local(&name, &self.previous)? {
+        if let Some(local_index) = self.comp_unit.resolve_local(&name).unwrap_or_else(|e| {
+            self.error_at(&self.previous.clone(), &e.message);
+            None
+        }) {
             get_op = chunk::OpCode::GetLocal;
             set_op = chunk::OpCode::SetLocal;
             arg = local_index;
-        } else if let Some(upvalue_index) = self.comp_unit.resolve_upvalue(&name, &self.previous)? {
+        } else if let Some(upvalue_index) =
+            self.comp_unit.resolve_upvalue(&name).unwrap_or_else(|e| {
+                self.error_at(&self.previous.clone(), &e.message);
+                None
+            })
+        {
             get_op = chunk::OpCode::GetUpvalue;
             set_op = chunk::OpCode::SetUpvalue;
             arg = upvalue_index;
         } else {
-            arg = self.identifier_constant(name)?;
+            arg = self.identifier_constant(name);
             get_op = chunk::OpCode::GetGlobal;
             set_op = chunk::OpCode::SetGlobal;
         }
 
-        if can_assign && self.match_token(scanner::TokenKind::Equal)? {
-            self.expression()?;
+        if can_assign && self.match_token(scanner::TokenKind::Equal) {
+            self.expression();
             self.emit_bytes(set_op.u8(), arg);
         } else {
             self.emit_bytes(get_op.u8(), arg);
         }
-        Ok(())
     }
 
-    fn add_local(&mut self, name: scanner::Token) -> Result<()> {
+    fn add_local(&mut self, name: scanner::Token) {
         if self.comp_unit.locals.len() == u8::MAX as usize {
-            return self.error("Too many local variables in function.");
+            self.error("Too many local variables in function.");
+            return;
         }
 
         self.comp_unit.locals.push(Local {
@@ -808,12 +819,11 @@ impl Compiler {
             depth: -1,
             is_captured: false,
         });
-        Ok(())
     }
 
-    fn block(&mut self) -> Result<()> {
+    fn block(&mut self) {
         while !self.check(TokenKind::RightBrace) && !self.check(TokenKind::Eof) {
-            self.declaration()?;
+            self.declaration();
         }
 
         self.consume(TokenKind::RightBrace, "Expect '}' after block.")
@@ -845,21 +855,21 @@ impl Compiler {
         self.comp_unit.locals.last_mut().unwrap().depth = self.comp_unit.scope_depth;
     }
 
-    fn if_statement(&mut self) -> Result<()> {
-        self.consume(TokenKind::LeftParen, "Expect '(' after 'if'.")?;
-        self.expression()?;
-        self.consume(TokenKind::RightParen, "Expect ')' after condition.")?;
+    fn if_statement(&mut self) {
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'if'.");
+        self.expression();
+        self.consume(TokenKind::RightParen, "Expect ')' after condition.");
 
         let then_jump = self.emit_jump(chunk::OpCode::JumpIfFalse);
         self.emit_byte(chunk::OpCode::Pop.u8());
-        self.statement()?;
+        self.statement();
 
         let else_jump = self.emit_jump(chunk::OpCode::Jump);
-        self.patch_jump(then_jump)?;
+        self.patch_jump(then_jump);
         self.emit_byte(chunk::OpCode::Pop.u8());
 
-        if self.match_token(TokenKind::Else)? {
-            self.statement()?;
+        if self.match_token(TokenKind::Else) {
+            self.statement();
         }
 
         self.patch_jump(else_jump)
@@ -872,92 +882,86 @@ impl Compiler {
         self.current_chunk().code.len() - 2
     }
 
-    fn patch_jump(&mut self, offset: usize) -> Result<()> {
+    fn patch_jump(&mut self, offset: usize) {
         let jump = self.current_chunk().code.len() - offset - 2;
 
         if jump > u16::MAX as usize {
-            return self.error("Too much code to jump over.");
+            self.error("Too much code to jump over.");
         }
 
         self.current_chunk().code[offset] = ((jump >> 8) & 0xff) as u8;
         self.current_chunk().code[offset + 1] = (jump & 0xff) as u8;
-
-        Ok(())
     }
 
-    fn and(&mut self, _can_assign: bool) -> Result<()> {
+    fn and(&mut self, _can_assign: bool) {
         let end_jump = self.emit_jump(chunk::OpCode::JumpIfFalse);
 
         self.emit_byte(chunk::OpCode::Pop.u8());
-        self.parse_precedence(Precedence::And)?;
+        self.parse_precedence(Precedence::And);
 
         self.patch_jump(end_jump)
     }
 
-    fn or(&mut self, _can_assign: bool) -> Result<()> {
+    fn or(&mut self, _can_assign: bool) {
         let else_jump = self.emit_jump(chunk::OpCode::JumpIfFalse);
         let end_jump = self.emit_jump(chunk::OpCode::Jump);
 
-        self.patch_jump(else_jump)?;
+        self.patch_jump(else_jump);
         self.emit_byte(chunk::OpCode::Pop.u8());
 
-        self.parse_precedence(Precedence::Or)?;
+        self.parse_precedence(Precedence::Or);
         self.patch_jump(end_jump)
     }
 
-    fn while_statement(&mut self) -> Result<()> {
+    fn while_statement(&mut self) {
         let loop_start = self.current_chunk().code.len() - 1;
 
-        self.consume(TokenKind::LeftParen, "Expect '(' after 'while'.")?;
-        self.expression()?;
-        self.consume(TokenKind::RightParen, "Expect ')' after condition.")?;
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'while'.");
+        self.expression();
+        self.consume(TokenKind::RightParen, "Expect ')' after condition.");
 
         let exit_jump = self.emit_jump(chunk::OpCode::JumpIfFalse);
 
         self.emit_byte(chunk::OpCode::Pop.u8());
-        self.statement()?;
+        self.statement();
 
-        self.emit_loop(loop_start)?;
+        self.emit_loop(loop_start);
 
-        self.patch_jump(exit_jump)?;
+        self.patch_jump(exit_jump);
         self.emit_byte(chunk::OpCode::Pop.u8());
-
-        Ok(())
     }
 
-    fn emit_loop(&mut self, loop_start: usize) -> Result<()> {
+    fn emit_loop(&mut self, loop_start: usize) {
         let offset = self.current_chunk().code.len() - loop_start + 2;
 
         if offset > u16::MAX as usize {
-            return self.error("Loop body too large.");
+            self.error("Loop body too large.");
         }
 
         self.emit_byte(chunk::OpCode::Loop.u8());
         self.emit_byte(((offset >> 8) & 0xff) as u8);
         self.emit_byte((offset & 0xff) as u8);
-
-        Ok(())
     }
 
-    fn for_statement(&mut self) -> Result<()> {
+    fn for_statement(&mut self) {
         self.begin_scope();
-        self.consume(TokenKind::LeftParen, "Expect '(' after 'for'.")?;
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'for'.");
 
         // Initializer:
-        if self.match_token(TokenKind::Semicolon)? {
+        if self.match_token(TokenKind::Semicolon) {
             // No initializer.
-        } else if self.match_token(TokenKind::Var)? {
-            self.var_declaration()?;
+        } else if self.match_token(TokenKind::Var) {
+            self.var_declaration();
         } else {
-            self.expression_statement()?;
+            self.expression_statement();
         }
 
         // Condition:
         let mut loop_start = self.current_chunk().code.len() - 1;
         let mut exit_jump: Option<usize> = None;
-        if !self.match_token(TokenKind::Semicolon)? {
-            self.expression()?;
-            self.consume(TokenKind::Semicolon, "Expect ';'.")?;
+        if !self.match_token(TokenKind::Semicolon) {
+            self.expression();
+            self.consume(TokenKind::Semicolon, "Expect ';'.");
 
             // Jump out of the loop if the condition is false.
             exit_jump = Some(self.emit_jump(chunk::OpCode::JumpIfFalse));
@@ -965,39 +969,37 @@ impl Compiler {
         }
 
         // Increment:
-        if !self.match_token(TokenKind::RightParen)? {
+        if !self.match_token(TokenKind::RightParen) {
             let body_jump = self.emit_jump(chunk::OpCode::Jump);
             let increment_start = self.current_chunk().code.len() - 1;
-            self.expression()?;
+            self.expression();
             self.emit_byte(chunk::OpCode::Pop.u8());
-            self.consume(TokenKind::RightParen, "Expect ')' after for clauses.")?;
-            self.emit_loop(loop_start)?;
+            self.consume(TokenKind::RightParen, "Expect ')' after for clauses.");
+            self.emit_loop(loop_start);
             loop_start = increment_start;
-            self.patch_jump(body_jump)?;
+            self.patch_jump(body_jump);
         }
 
         // Body:
-        self.statement()?;
+        self.statement();
 
-        self.emit_loop(loop_start)?;
+        self.emit_loop(loop_start);
         if let Some(exit_jump) = exit_jump {
-            self.patch_jump(exit_jump)?;
+            self.patch_jump(exit_jump);
             self.emit_byte(chunk::OpCode::Pop.u8()); // Condition.
         }
 
         self.end_scope();
-        Ok(())
     }
 
-    fn fun_declaration(&mut self) -> Result<()> {
-        let global = self.parse_variable("Expect function name.")?;
+    fn fun_declaration(&mut self) {
+        let global = self.parse_variable("Expect function name.");
         self.mark_initialized();
-        self.function(FunctionType::Function)?;
+        self.function(FunctionType::Function);
         self.define_variable(global);
-        Ok(())
     }
 
-    fn function(&mut self, function_type: FunctionType) -> Result<()> {
+    fn function(&mut self, function_type: FunctionType) {
         let name = self.previous.lexeme.clone();
         let comp_unit = CompilationUnit::new(
             function_type,
@@ -1008,91 +1010,86 @@ impl Compiler {
 
         self.begin_scope();
 
-        self.consume(TokenKind::LeftParen, "Expect '(' after function name.")?;
+        self.consume(TokenKind::LeftParen, "Expect '(' after function name.");
         if !self.check(TokenKind::RightParen) {
             loop {
                 self.comp_unit.function.arity += 1;
                 if self.comp_unit.function.arity > 255 {
-                    return self.error_at_current("Cannot have more than 255 parameters.");
+                    self.error_at_current("Can't have more than 255 parameters.");
                 }
 
-                let constant = self.parse_variable("Expect parameter name.")?;
+                let constant = self.parse_variable("Expect parameter name.");
                 self.define_variable(constant);
 
-                if !self.match_token(TokenKind::Comma)? {
+                if !self.match_token(TokenKind::Comma) {
                     break;
                 }
             }
         }
-        self.consume(TokenKind::RightParen, "Expect ')' after function name.")?;
-        self.consume(TokenKind::LeftBrace, "Expect '{' before function body.")?;
-        self.block()?;
+        self.consume(TokenKind::RightParen, "Expect ')' after function name.");
+        self.consume(TokenKind::LeftBrace, "Expect '{' before function body.");
+        self.block();
 
         let upvalues = self.comp_unit.upvalues.clone();
         let func = self.end_comp_unit();
         let upvalue_count = func.upvalue_count;
 
-        let constant = self.make_constant(Value::Obj(Rc::new(func)))?;
+        let constant = self.make_constant(Value::Obj(Rc::new(func)));
         self.emit_bytes(chunk::OpCode::Closure.u8(), constant);
 
         for i in 0..upvalue_count {
             let upvalue = upvalues[i as usize].clone();
             self.emit_bytes(upvalue.is_local as u8, upvalue.index);
         }
-
-        Ok(())
     }
 
-    fn call(&mut self, _can_assign: bool) -> Result<()> {
-        let arg_count = self.argument_list()?;
+    fn call(&mut self, _can_assign: bool) {
+        let arg_count = self.argument_list();
         self.emit_bytes(chunk::OpCode::Call.u8(), arg_count);
-        Ok(())
     }
 
-    fn argument_list(&mut self) -> Result<u8> {
+    fn argument_list(&mut self) -> u8 {
         let mut arg_count = 0;
         if !self.check(TokenKind::RightParen) {
             loop {
-                self.expression()?;
+                self.expression();
                 if arg_count == 255 {
-                    return self
-                        .error_at_current("Cannot have more than 255 arguments.")
-                        .map(|_| 0);
+                    self.error_at_current("Cannot have more than 255 arguments.");
+                    return 0;
                 }
                 arg_count += 1;
-                if !self.match_token(TokenKind::Comma)? {
+                if !self.match_token(TokenKind::Comma) {
                     break;
                 }
             }
         }
-        self.consume(TokenKind::RightParen, "Expect ')' after arguments.")?;
-        Ok(arg_count)
+        self.consume(TokenKind::RightParen, "Expect ')' after arguments.");
+        arg_count
     }
 
-    fn return_statement(&mut self) -> Result<()> {
+    fn return_statement(&mut self) {
         if let FunctionType::Script = self.comp_unit.function_type {
-            return self.error("Cannot return from top-level code.");
+            self.error("Cannot return from top-level code.");
         }
 
-        if self.match_token(TokenKind::Semicolon)? {
+        if self.match_token(TokenKind::Semicolon) {
             self.emit_return();
         } else {
             if self.comp_unit.function_type == FunctionType::Initializer {
-                return self.error("Can't return a value from an initializer.");
+                self.error("Can't return a value from an initializer.");
             }
 
-            self.expression()?;
-            self.consume(TokenKind::Semicolon, "Expect ';' after return value.")?;
+            self.expression();
+            self.consume(TokenKind::Semicolon, "Expect ';' after return value.");
             self.emit_byte(chunk::OpCode::Return.u8());
         }
-        Ok(())
     }
 
-    fn class_declaration(&mut self) -> Result<()> {
-        self.consume(TokenKind::Identifier, "Expect class name.")?;
+    fn class_declaration(&mut self) {
+        self.consume(TokenKind::Identifier, "Expect class name.");
         let class_name = self.previous.lexeme.clone();
-        let name_constant = self.identifier_constant(class_name.clone())?;
-        self.declare_variable()?;
+        let name_constant = self.identifier_constant(class_name.clone());
+        self.declare_variable();
 
         self.emit_bytes(chunk::OpCode::Class.u8(), name_constant);
         self.define_variable(name_constant);
@@ -1103,30 +1100,30 @@ impl Compiler {
         };
         self.class_compiler = Some(class_compiler);
 
-        if self.match_token(TokenKind::Less)? {
-            self.consume(TokenKind::Identifier, "Expect superclass name.")?;
-            self.variable(false)?;
+        if self.match_token(TokenKind::Less) {
+            self.consume(TokenKind::Identifier, "Expect superclass name.");
+            self.variable(false);
 
             if class_name == self.previous.lexeme {
                 return self.error("A class can't inherit from itself.");
             }
 
             self.begin_scope();
-            self.add_local(synthetic_token("super"))?;
+            self.add_local(synthetic_token("super"));
             self.define_variable(0);
 
-            self.named_variable(class_name.clone(), false)?;
+            self.named_variable(class_name.clone(), false);
             self.emit_byte(chunk::OpCode::Inherit.u8());
             self.class_compiler.as_mut().unwrap().has_superclass = true;
         }
 
-        self.named_variable(class_name, false)?;
+        self.named_variable(class_name, false);
 
-        self.consume(TokenKind::LeftBrace, "Expect '{' before class body.")?;
+        self.consume(TokenKind::LeftBrace, "Expect '{' before class body.");
         while !self.check(TokenKind::RightBrace) && !self.check(TokenKind::Eof) {
-            self.method()?;
+            self.method();
         }
-        self.consume(TokenKind::RightBrace, "Expect '}' after class body.")?;
+        self.consume(TokenKind::RightBrace, "Expect '}' after class body.");
         self.emit_byte(chunk::OpCode::Pop.u8());
 
         if self.class_compiler.as_ref().unwrap().has_superclass {
@@ -1136,87 +1133,87 @@ impl Compiler {
         // TODO: try to simplify this
         let enclosing = self.class_compiler.as_ref().unwrap().enclosing.as_ref();
         self.class_compiler = enclosing.clone();
-        Ok(())
     }
 
-    fn dot(&mut self, can_assign: bool) -> Result<()> {
-        self.consume(TokenKind::Identifier, "Expect property name after '.'.")?;
-        let name = self.identifier_constant(self.previous.lexeme.clone())?;
+    fn dot(&mut self, can_assign: bool) {
+        self.consume(TokenKind::Identifier, "Expect property name after '.'.");
+        let name = self.identifier_constant(self.previous.lexeme.clone());
 
-        if can_assign && self.match_token(TokenKind::Equal)? {
-            self.expression()?;
+        if can_assign && self.match_token(TokenKind::Equal) {
+            self.expression();
             self.emit_bytes(chunk::OpCode::SetProperty.u8(), name);
-        } else if self.match_token(TokenKind::LeftParen)? {
-            let arg_count = self.argument_list()?;
+        } else if self.match_token(TokenKind::LeftParen) {
+            let arg_count = self.argument_list();
             self.emit_bytes(chunk::OpCode::Invoke.u8(), name);
             self.emit_byte(arg_count);
         } else {
             self.emit_bytes(chunk::OpCode::GetProperty.u8(), name);
         }
-
-        Ok(())
     }
 
-    fn method(&mut self) -> Result<()> {
-        self.consume(TokenKind::Identifier, "Expect method name.")?;
-        let name_constant = self.identifier_constant(self.previous.lexeme.clone())?;
+    fn method(&mut self) {
+        self.consume(TokenKind::Identifier, "Expect method name.");
+        let name_constant = self.identifier_constant(self.previous.lexeme.clone());
         let mut func_type = FunctionType::Method;
         if self.previous.lexeme == "init" {
             func_type = FunctionType::Initializer;
         }
-        self.function(func_type)?;
+        self.function(func_type);
         self.emit_bytes(chunk::OpCode::Method.u8(), name_constant);
-
-        Ok(())
     }
 
-    fn this(&mut self, _can_assign: bool) -> Result<()> {
+    fn this(&mut self, _can_assign: bool) {
         if self.class_compiler.is_none() {
-            return self.error("Cannot use 'this' outside of a class.");
+            self.error("Cannot use 'this' outside of a class.");
+            return;
         }
 
         self.variable(false)
     }
 
-    fn super_(&mut self, _can_assign: bool) -> Result<()> {
+    fn super_(&mut self, _can_assign: bool) {
         if self.class_compiler.is_none() {
             return self.error("Cannot use 'super' outside of a class.");
         } else if !self.class_compiler.as_ref().unwrap().has_superclass {
             return self.error("Cannot use 'super' in a class with no superclass.");
         }
 
-        self.consume(TokenKind::Dot, "Expect '.' after 'super'.")?;
-        self.consume(TokenKind::Identifier, "Expect superclass method name.")?;
-        let name = self.identifier_constant(self.previous.lexeme.clone())?;
+        self.consume(TokenKind::Dot, "Expect '.' after 'super'.");
+        self.consume(TokenKind::Identifier, "Expect superclass method name.");
+        let name = self.identifier_constant(self.previous.lexeme.clone());
 
-        self.named_variable("this".to_string(), false)?;
+        self.named_variable("this".to_string(), false);
 
-        if self.match_token(TokenKind::LeftParen)? {
-            let arg_count = self.argument_list()?;
-            self.named_variable("super".to_string(), false)?;
+        if self.match_token(TokenKind::LeftParen) {
+            let arg_count = self.argument_list();
+            self.named_variable("super".to_string(), false);
             self.emit_bytes(chunk::OpCode::SuperInvoke.u8(), name);
             self.emit_byte(arg_count);
         } else {
-            self.named_variable("super".to_string(), false)?;
+            self.named_variable("super".to_string(), false);
             self.emit_bytes(chunk::OpCode::GetSuper.u8(), name);
         }
-        Ok(())
-    }
-}
-
-fn error_at(token: &scanner::Token, message: &str) -> Result<()> {
-    eprint!("[line {}] Error", token.line);
-
-    if token.kind == scanner::TokenKind::Eof {
-        eprint!(" at end");
-    } else if token.kind == scanner::TokenKind::Error {
-        // Nothing
-    } else {
-        eprint!(" at '{}'", token.lexeme);
     }
 
-    eprintln!(": {}", message);
-    Err(anyhow::anyhow!("Compiler error"))
+    fn error_at(&mut self, token: &scanner::Token, message: &str) {
+        if self.panic_mode {
+            return;
+        }
+        self.panic_mode = true;
+
+        eprint!("[line {}] Error", token.line);
+
+        if token.kind == scanner::TokenKind::Eof {
+            eprint!(" at end");
+        } else if token.kind == scanner::TokenKind::Error {
+            // Nothing
+        } else {
+            eprint!(" at '{}'", token.lexeme);
+        }
+
+        eprintln!(": {}", message);
+        self.had_error = true;
+    }
 }
 
 fn synthetic_token(lexeme: &str) -> scanner::Token {

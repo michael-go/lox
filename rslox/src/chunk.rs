@@ -1,4 +1,3 @@
-use anyhow::Result;
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
 
@@ -73,13 +72,9 @@ impl Chunk {
         self.lines.insert(self.code.len() - 1, line);
     }
 
-    pub fn add_constant(&mut self, value: Value) -> Result<u8> {
-        if self.constants.len() >= u8::MAX as usize {
-            return Err(anyhow::anyhow!("Too many constants in one chunk."));
-        }
-
+    pub fn add_constant(&mut self, value: Value) -> usize {
         self.constants.push(value);
-        Ok((self.constants.len() - 1) as u8)
+        self.constants.len() - 1
     }
 
     pub fn dissasemble(&self, name: &str) {
