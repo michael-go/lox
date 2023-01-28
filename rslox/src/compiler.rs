@@ -809,7 +809,7 @@ impl Compiler {
     }
 
     fn add_local(&mut self, name: scanner::Token) {
-        if self.comp_unit.locals.len() == u8::MAX as usize {
+        if self.comp_unit.locals.len() == u8::MAX as usize + 1 {
             self.error("Too many local variables in function.");
             return;
         }
