@@ -1054,7 +1054,7 @@ impl Compiler {
             loop {
                 self.expression();
                 if arg_count == 255 {
-                    self.error_at_current("Cannot have more than 255 arguments.");
+                    self.error("Can't have more than 255 arguments.");
                     return 0;
                 }
                 arg_count += 1;
