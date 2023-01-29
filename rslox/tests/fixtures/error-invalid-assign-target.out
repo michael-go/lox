@@ -2,5 +2,5 @@
 # stdout:
 
 # stderr:
-[line 2] Error at '=': Invalid assignment target
+[line 2] Error at '=': Invalid assignment target.
 

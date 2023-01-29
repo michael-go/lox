@@ -467,7 +467,7 @@ impl Compiler {
         }
 
         if can_assign && self.match_token(TokenKind::Equal) {
-            self.error("Invalid assignment target");
+            self.error("Invalid assignment target.");
         }
     }
 
@@ -680,7 +680,7 @@ impl Compiler {
 
     fn expression_statement(&mut self) {
         self.expression();
-        self.consume(scanner::TokenKind::Semicolon, "Expect ';' after value.");
+        self.consume(scanner::TokenKind::Semicolon, "Expect ';' after expression.");
         self.emit_byte(chunk::OpCode::Pop.u8());
     }
 
@@ -1026,7 +1026,7 @@ impl Compiler {
                 }
             }
         }
-        self.consume(TokenKind::RightParen, "Expect ')' after function name.");
+        self.consume(TokenKind::RightParen, "Expect ')' after parameters.");
         self.consume(TokenKind::LeftBrace, "Expect '{' before function body.");
         self.block();
 
@@ -1069,7 +1069,7 @@ impl Compiler {
 
     fn return_statement(&mut self) {
         if let FunctionType::Script = self.comp_unit.function_type {
-            self.error("Cannot return from top-level code.");
+            self.error("Can't return from top-level code.");
         }
 
         if self.match_token(TokenKind::Semicolon) {
@@ -1164,7 +1164,7 @@ impl Compiler {
 
     fn this(&mut self, _can_assign: bool) {
         if self.class_compiler.is_none() {
-            self.error("Cannot use 'this' outside of a class.");
+            self.error("Can't use 'this' outside of a class.");
             return;
         }
 
@@ -1173,9 +1173,9 @@ impl Compiler {
 
     fn super_(&mut self, _can_assign: bool) {
         if self.class_compiler.is_none() {
-            return self.error("Cannot use 'super' outside of a class.");
+            return self.error("Can't use 'super' outside of a class.");
         } else if !self.class_compiler.as_ref().unwrap().has_superclass {
-            return self.error("Cannot use 'super' in a class with no superclass.");
+            return self.error("Can't use 'super' in a class with no superclass.");
         }
 
         self.consume(TokenKind::Dot, "Expect '.' after 'super'.");

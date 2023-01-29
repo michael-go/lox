@@ -416,7 +416,13 @@ impl VM {
                         ctx.peek(0).clone();
                 }
                 Some(OpCode::GetGlobal) => {
-                    let name = Self::as_objstring(ctx.read_constant()).unwrap();
+                    let name_obj = ctx.read_constant().clone();
+                    let name = Self::as_objstring(&name_obj).unwrap();
+                    if !self.globals.contains_key(name) {
+                        return Err(ctx
+                            .runtime_error(&format!("Undefined variable '{}'.", name))
+                            .into());
+                    }
                     let value = self.globals.get(name).unwrap_or(&Value::Nil);
                     ctx.push(value.clone());
                 }

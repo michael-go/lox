@@ -1,10 +1,10 @@
-# exit code: 0
+# exit code: 70
 # stdout:
 foobar
 shadowed
 foo
-nil
-nil
 
 # stderr:
+Undefined variable 'l1'.
+[line 15] in <script>
 
