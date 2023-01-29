@@ -303,7 +303,7 @@ impl RunCtx {
             Ok(())
         } else {
             Err(self
-                .runtime_error(&format!("Undefined method/property '{}'.", name))
+                .runtime_error(&format!("Undefined property '{}'.", name))
                 .into())
         }
     }
@@ -336,7 +336,7 @@ impl RunCtx {
             self.call(method.clone(), arg_count)
         } else {
             Err(self
-                .runtime_error(&format!("Undefined method '{}'.", name))
+                .runtime_error(&format!("Undefined property '{}'.", name))
                 .into())
         }
     }
