@@ -63,8 +63,8 @@ impl LoxError {
     }
 }
 
-const FRAMES_MAX: usize = u8::MAX as usize;
-const STACK_MAX: usize = u8::MAX as usize;
+const FRAMES_MAX: usize = 64;
+const STACK_MAX: usize = (u8::MAX as usize + 1) * FRAMES_MAX;
 
 struct RunCtx {
     frames: ArrayVec<CallFrame, FRAMES_MAX>,
@@ -159,9 +159,6 @@ impl RunCtx {
     }
 
     fn call(&mut self, closure: Rc<Closure>, arg_count: u8) -> Result<()> {
-        if self.frames.len() >= self.frames.capacity() {
-            return Err(self.runtime_error("Stack overflow.").into());
-        }
         if arg_count as usize != closure.function.arity {
             return Err(self
                 .runtime_error(&format!(
@@ -169,6 +166,10 @@ impl RunCtx {
                     closure.function.arity, arg_count
                 ))
                 .into());
+        }
+
+        if self.frames.len() >= self.frames.capacity() {
+            return Err(self.runtime_error("Stack overflow.").into());
         }
 
         let frame = CallFrame {
