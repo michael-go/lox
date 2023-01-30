@@ -160,7 +160,7 @@ impl CompilationUnit {
             }
         }
 
-        if self.upvalues.len() == u8::MAX as usize {
+        if self.upvalues.len() == u8::MAX as usize + 1 {
             return Err(CompUnitError::new(
                 "Too many closure variables in function.".to_string(),
             ));
@@ -680,7 +680,10 @@ impl Compiler {
 
     fn expression_statement(&mut self) {
         self.expression();
-        self.consume(scanner::TokenKind::Semicolon, "Expect ';' after expression.");
+        self.consume(
+            scanner::TokenKind::Semicolon,
+            "Expect ';' after expression.",
+        );
         self.emit_byte(chunk::OpCode::Pop.u8());
     }
 
@@ -779,7 +782,7 @@ impl Compiler {
         let set_op: chunk::OpCode;
 
         if let Some(local_index) = self.comp_unit.resolve_local(&name).unwrap_or_else(|e| {
-            self.error_at(&self.previous.clone(), &e.message);
+            self.error(&e.message);
             None
         }) {
             get_op = chunk::OpCode::GetLocal;
@@ -787,7 +790,7 @@ impl Compiler {
             arg = local_index;
         } else if let Some(upvalue_index) =
             self.comp_unit.resolve_upvalue(&name).unwrap_or_else(|e| {
-                self.error_at(&self.previous.clone(), &e.message);
+                self.error(&e.message);
                 None
             })
         {
