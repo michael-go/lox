@@ -252,13 +252,13 @@ impl RunCtx {
         let mut cursor = self.open_upvalues.cursor_front_mut();
 
         while let Some(upvalue) = cursor.current() {
-            if upvalue.as_ref().borrow().location < last_location {
-                break;
+            if upvalue.as_ref().borrow().location >= last_location {
+                let value = self.stack[upvalue.as_ref().borrow().location].clone();
+                upvalue.borrow_mut().closed = Some(value);
+                cursor.remove_current();
+            } else {
+                cursor.move_next()
             }
-
-            let value = self.stack[upvalue.as_ref().borrow().location].clone();
-            upvalue.borrow_mut().closed = Some(value);
-            cursor.remove_current();
         }
         Ok(())
     }
