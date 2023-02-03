@@ -67,7 +67,7 @@ impl PartialEq for dyn Obj {
                 return self.downcast_ref::<Instance>() == other.downcast_ref::<Instance>();
             }
             ObjType::BoundMethod => {
-                return self.downcast_ref::<BoundMethod>() == other.downcast_ref::<BoundMethod>();
+                return self as *const _ == other as *const _
             }
         }
     }
