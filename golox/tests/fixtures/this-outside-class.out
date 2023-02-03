@@ -2,7 +2,7 @@
 # stdout:
 
 # stderr:
-[line 2] Error: : Can't use 'this' outside of a class.
-[line 5] Error: : Can't use 'this' outside of a class.
+[line 2] Error: Can't use 'this' outside of a class.
+[line 5] Error: Can't use 'this' outside of a class.
 exit status 65
 

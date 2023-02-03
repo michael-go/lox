@@ -2,6 +2,6 @@
 # stdout:
 
 # stderr:
-[line 3] Error:  at end: Expect ';' after value.
+[line 3] Error at end: Expect ';' after value.
 exit status 65
 

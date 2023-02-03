@@ -16,7 +16,7 @@ var HadError bool
 var HadRuntimeError bool
 
 var ReportError = func(line int, where string, message string) {
-	fmt.Fprintln(os.Stderr, fmt.Sprintf("[line %d] Error: %s: %s", line, where, message))
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("[line %d] Error%s: %s", line, where, message))
 	HadError = true
 }
 
