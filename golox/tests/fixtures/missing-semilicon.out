@@ -1,3 +1,7 @@
 # exit code: 1
 # stdout:
+
+# stderr:
 [line 3] Error:  at end: Expect ';' after value.
+exit status 65
+

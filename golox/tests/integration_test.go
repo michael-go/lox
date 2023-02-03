@@ -12,24 +12,25 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func parseExpected(expectedPath string) (int, string, error) {
+func parseExpected(expectedPath string) (int, string, string, error) {
 	expected, err := ioutil.ReadFile(expectedPath)
 	if err != nil {
-		return 0, "", fmt.Errorf("could not read expected output: %w", err)
+		return 0, "", "", fmt.Errorf("could not read expected output: %w", err)
 	}
 
-	r := regexp.MustCompile(`(?s)# exit code: (?P<ExitCode>\d+)\s*\n# stdout:\s*\n(?P<Stdout>.*)`)
+	r := regexp.MustCompile(`(?s)# exit code: (?P<ExitCode>\d+)\s*\n# stdout:\s*\n(?P<Stdout>.*)\n# stderr:\s*\n(?P<Stderr>.*)\n`)
 	match := r.FindStringSubmatch(string(expected))
 	if len(match) == 0 {
-		return 0, "", fmt.Errorf("failed to parse expected output")
+		return 0, "", "", fmt.Errorf("failed to parse expected output")
 	}
 	exitCode, err := strconv.Atoi(match[1])
 	if err != nil {
-		return 0, "", fmt.Errorf("could not parse exit code: %w", err)
+		return 0, "", "", fmt.Errorf("could not parse exit code: %w", err)
 	}
 	stdout := match[2]
+	stderr := match[3]
 
-	return exitCode, stdout, nil
+	return exitCode, stdout, stderr, nil
 }
 
 func TestIntegration(t *testing.T) {
@@ -48,16 +49,22 @@ func TestIntegration(t *testing.T) {
 			t.Run(testName, func(t *testing.T) {
 				cmd := exec.Command("go", "run", "../main.go", loxPath)
 				stdout, err := cmd.Output()
-				if _, ok := err.(*exec.ExitError); err != nil && !ok {
-					t.Fatalf("failed to run lox file %s, err: %v", loxPath, err)
+				stderr := ""
+				if err != nil {
+					exitError, ok := err.(*exec.ExitError)
+					if !ok {
+						panic(fmt.Errorf("failed to run lox file %s, err: %v", loxPath, err))
+					}
+					stderr = string(exitError.Stderr)
 				}
 
-				expectedExitCode, expectedStdout, err := parseExpected(expectedPath)
+				expectedExitCode, expectedStdout, expectedStderr, err := parseExpected(expectedPath)
 				if err != nil {
 					t.Fatalf("could not parse expected output: %v", err)
 				}
 				assert.Equal(t, expectedExitCode, cmd.ProcessState.ExitCode(), "exit code")
 				assert.Equal(t, expectedStdout, string(stdout), "stdout")
+				assert.Equal(t, expectedStderr, string(stderr), "stderr")
 			})
 		}
 	}

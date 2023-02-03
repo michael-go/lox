@@ -1,3 +1,7 @@
 # exit code: 1
 # stdout:
+
+# stderr:
 [line 3] Error: : Can't return a value from an initializer.
+exit status 65
+

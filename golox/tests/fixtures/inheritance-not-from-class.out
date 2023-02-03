@@ -1,4 +1,8 @@
 # exit code: 1
 # stdout:
+
+# stderr:
 Superclass must be a class.
 [line 3]
+exit status 70
+

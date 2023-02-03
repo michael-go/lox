@@ -12,3 +12,6 @@ Foo instance
 after init():
 Foo instance
 1.5
+
+# stderr:
+

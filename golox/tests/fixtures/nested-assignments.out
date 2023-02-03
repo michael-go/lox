@@ -9,3 +9,6 @@ global c
 global a
 global b
 global c
+
+# stderr:
+

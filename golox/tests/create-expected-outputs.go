@@ -22,13 +22,19 @@ func createExpectedOutputs() {
 
 			cmd := exec.Command("go", "run", "main.go", loxPath)
 			stdout, err := cmd.Output()
-			if _, ok := err.(*exec.ExitError); err != nil && !ok {
-				panic(fmt.Errorf("failed to run lox file %s, err: %v", loxPath, err))
+			stderr := ""
+			if err != nil {
+				exitError, ok := err.(*exec.ExitError)
+				if !ok {
+					panic(fmt.Errorf("failed to run lox file %s, err: %v", loxPath, err))
+				}
+				stderr = string(exitError.Stderr)
 			}
 
 			var expected strings.Builder
 			expected.WriteString(fmt.Sprintf("# exit code: %d\n", cmd.ProcessState.ExitCode()))
-			expected.WriteString(fmt.Sprintf("# stdout:\n%s", string(stdout)))
+			expected.WriteString(fmt.Sprintf("# stdout:\n%s\n", string(stdout)))
+			expected.WriteString(fmt.Sprintf("# stderr:\n%s\n", string(stderr)))
 
 			err = ioutil.WriteFile(expectedPath, []byte(expected.String()), 0644)
 			if err != nil {
