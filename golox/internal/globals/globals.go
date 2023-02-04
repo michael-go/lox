@@ -20,6 +20,10 @@ var ReportError = func(line int, where string, message string) {
 	HadError = true
 }
 
+var ReportErrorAt = func(tok token.Token, message string) {
+	ReportError(tok.Line, fmt.Sprintf(" at '%s'", tok.Lexeme), message)
+}
+
 var ReportRuntimeError = func(err RuntimeError) {
 	fmt.Fprintln(os.Stderr, fmt.Sprintf("%s\n[line %d]", err.Message, err.Token.Line))
 	HadRuntimeError = true

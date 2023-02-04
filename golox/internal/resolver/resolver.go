@@ -87,7 +87,7 @@ func (r *Resolver) declare(name token.Token) {
 	}
 	scope := r.scopes[len(r.scopes)-1]
 	if _, ok := scope[name.Lexeme]; ok {
-		globals.ReportError(name.Line, "", "Already a variable with this name in this scope.")
+		globals.ReportErrorAt(name, "Already a variable with this name in this scope.")
 	}
 	scope[name.Lexeme] = false
 }
@@ -105,7 +105,7 @@ func (r *Resolver) VisitVariableExpr(expr *ast.Variable) any {
 		scope := r.scopes[len(r.scopes)-1]
 
 		if _, ok := scope[expr.Name.Lexeme]; ok && !scope[expr.Name.Lexeme] {
-			globals.ReportError(expr.Name.Line, "", "Can't read local variable in its own initializer.")
+			globals.ReportErrorAt(expr.Name, "Can't read local variable in its own initializer.")
 		}
 	}
 
@@ -168,12 +168,12 @@ func (r *Resolver) VisitPrintStmt(stmt *ast.Print) any {
 
 func (r *Resolver) VisitReturnStmt(stmt *ast.Return) any {
 	if r.currentFunctionType == NOT_FUNC {
-		globals.ReportError(stmt.Keyword.Line, "", "Can't return from top-level code.")
+		globals.ReportErrorAt(stmt.Keyword, "Can't return from top-level code.")
 	}
 
 	if stmt.Value != nil {
 		if r.currentFunctionType == INITIALIZER {
-			globals.ReportError(stmt.Keyword.Line, "", "Can't return a value from an initializer.")
+			globals.ReportErrorAt(stmt.Keyword, "Can't return a value from an initializer.")
 		}
 		r.resolveExpr(stmt.Value)
 	}
@@ -230,7 +230,7 @@ func (r *Resolver) VisitClassStmt(stmt *ast.Class) any {
 
 	if stmt.Superclass != nil {
 		if stmt.Name.Lexeme == stmt.Superclass.Name.Lexeme {
-			globals.ReportError(stmt.Superclass.Name.Line, "", "A class can't inherit from itself.")
+			globals.ReportErrorAt(stmt.Superclass.Name, "A class can't inherit from itself.")
 		}
 
 		r.currentClassType = SUBCLASS
@@ -275,7 +275,7 @@ func (r *Resolver) VisitSetExpr(expr *ast.Set) any {
 
 func (r *Resolver) VisitThisExpr(expr *ast.This) any {
 	if r.currentClassType == NOT_CLASS {
-		globals.ReportError(expr.Keyword.Line, "", "Can't use 'this' outside of a class.")
+		globals.ReportErrorAt(expr.Keyword, "Can't use 'this' outside of a class.")
 		return nil
 	}
 	r.resolveLocal(expr, expr.Keyword)
@@ -284,11 +284,11 @@ func (r *Resolver) VisitThisExpr(expr *ast.This) any {
 
 func (r *Resolver) VisitSuperExpr(expr *ast.Super) any {
 	if r.currentClassType == NOT_CLASS {
-		globals.ReportError(expr.Keyword.Line, "", "Can't use 'super' outside of a class.")
+		globals.ReportErrorAt(expr.Keyword, "Can't use 'super' outside of a class.")
 		return nil
 	}
 	if r.currentClassType != SUBCLASS {
-		globals.ReportError(expr.Keyword.Line, "", "Can't use 'super' in a class with no superclass.")
+		globals.ReportErrorAt(expr.Keyword, "Can't use 'super' in a class with no superclass.")
 		return nil
 	}
 	r.resolveLocal(expr, expr.Keyword)

@@ -2,6 +2,6 @@
 # stdout:
 
 # stderr:
-[line 1] Error: A class can't inherit from itself.
+[line 1] Error at 'Oops': A class can't inherit from itself.
 exit status 65
 

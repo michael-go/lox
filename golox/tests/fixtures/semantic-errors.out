@@ -2,8 +2,8 @@
 # stdout:
 
 # stderr:
-[line 2] Error: Can't read local variable in its own initializer.
-[line 9] Error: Already a variable with this name in this scope.
-[line 14] Error: Can't return from top-level code.
+[line 2] Error at 'x': Can't read local variable in its own initializer.
+[line 9] Error at 'y': Already a variable with this name in this scope.
+[line 14] Error at 'return': Can't return from top-level code.
 exit status 65
 
