@@ -345,7 +345,7 @@ func (p *Parser) call() ast.Expr {
 		if p.match(token.LEFT_PAREN) {
 			expr = p.finishCall(expr)
 		} else if p.match(token.DOT) {
-			name := p.consume(token.IDENTIFIER, "expect property name after '.'.")
+			name := p.consume(token.IDENTIFIER, "Expect property name after '.'.")
 			expr = &ast.Get{Object: expr, Name: name}
 		} else {
 			break
