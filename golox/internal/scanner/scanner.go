@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"fmt"
 	"strconv"
 	"unicode/utf8"
 
@@ -107,7 +106,7 @@ func (s *Scanner) scanToken() {
 		} else if isAlpha(r) {
 			s.identifier()
 		} else {
-			globals.ReportError(s.line, "", fmt.Sprintf("Unexpected character %#U", r))
+			globals.ReportError(s.line, "", "Unexpected character.")
 		}
 	}
 }
