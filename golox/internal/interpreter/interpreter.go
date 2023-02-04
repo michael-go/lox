@@ -358,7 +358,7 @@ func (i *Interpreter) VisitSetExpr(expr *ast.Set) any {
 		return value
 	}
 
-	panic(globals.RuntimeError{Token: expr.Name, Message: "Only instances have properties."})
+	panic(globals.RuntimeError{Token: expr.Name, Message: "Only instances have fields."})
 }
 
 func (i *Interpreter) VisitThisExpr(expr *ast.This) any {
