@@ -42,7 +42,7 @@ func (c *LoxClass) Arity() int {
 
 func (c *LoxClass) Call(interpreter *Interpreter, arguments []any) any {
 	instance := NewLoxInstance(c)
-	if initializer := c.methods["init"]; initializer != nil {
+	if initializer := c.FindMethod("init"); initializer != nil {
 		initializer.Bind(instance).Call(interpreter, arguments)
 	}
 	return instance
@@ -81,7 +81,6 @@ func (i *LoxInstance) Get(name token.Token) any {
 
 	method := i.class.FindMethod(name.Lexeme)
 	if method != nil {
-		// TODO: bind to what?
 		method := method.Bind(i)
 		return method
 	}
