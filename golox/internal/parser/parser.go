@@ -425,7 +425,7 @@ func (p *Parser) consume(tokenType token.Type, message string) token.Token {
 }
 
 func (p *Parser) panicError(t token.Token, message string) {
-	p.reportError(p.peek(), message)
+	p.reportError(t, message)
 	panic(ParserError{message: message})
 }
 
