@@ -379,5 +379,5 @@ func (i *Interpreter) VisitSuperExpr(expr *ast.Super) any {
 		panic(globals.RuntimeError{Token: expr.Method, Message: fmt.Sprintf("Undefined property '%s'.", expr.Method.Lexeme)})
 	}
 
-	return method.Bind(object, method.isInitializer)
+	return method.Bind(object)
 }

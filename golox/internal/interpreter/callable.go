@@ -58,8 +58,8 @@ func (f LoxFunction) String() string {
 	return "<fn " + f.declaration.Name.Lexeme + ">"
 }
 
-func (f LoxFunction) Bind(instance *LoxInstance, isInitialzier bool) *LoxFunction {
+func (f LoxFunction) Bind(instance *LoxInstance) *LoxFunction {
 	environment := NewEnvironment(f.closure)
 	environment.Define("this", instance)
-	return NewLoxFunction(f.declaration, environment, isInitialzier)
+	return NewLoxFunction(f.declaration, environment, f.isInitializer)
 }
