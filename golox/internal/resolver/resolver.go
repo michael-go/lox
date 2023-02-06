@@ -252,12 +252,13 @@ func (r *Resolver) VisitClassStmt(stmt *ast.Class) any {
 		}
 		r.resolveFunction(method, declaration)
 	}
-	r.currentClassType = enclosingClass
 	r.endScope()
 
 	if stmt.Superclass != nil {
 		r.endScope()
 	}
+
+	r.currentClassType = enclosingClass
 
 	return nil
 }

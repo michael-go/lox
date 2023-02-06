@@ -306,13 +306,6 @@ func (i *Interpreter) VisitReturnStmt(stmt *ast.Return) any {
 }
 
 func (i *Interpreter) VisitClassStmt(stmt *ast.Class) any {
-	i.environment.Define(stmt.Name.Lexeme, nil)
-
-	if stmt.Superclass != nil {
-		i.environment = NewEnvironment(i.environment)
-		i.environment.Define("super", i.evaluate(stmt.Superclass))
-	}
-
 	var superValue any
 	var super *LoxClass
 	if stmt.Superclass != nil {
@@ -323,6 +316,13 @@ func (i *Interpreter) VisitClassStmt(stmt *ast.Class) any {
 		super = superValue.(*LoxClass)
 	} else {
 		super = nil
+	}
+
+	i.environment.Define(stmt.Name.Lexeme, nil)
+
+	if stmt.Superclass != nil {
+		i.environment = NewEnvironment(i.environment)
+		i.environment.Define("super", i.evaluate(stmt.Superclass))
 	}
 
 	methods := make(map[string]*LoxFunction)
