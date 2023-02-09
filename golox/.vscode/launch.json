@@ -9,8 +9,15 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${fileDirname}",
-            "args": ["tests/fixtures/functions.lox"]
+            "program": "main.go",
+            "args": ["${input:file}"]
+        }
+    ],
+    "inputs": [
+        {
+            "id": "file",
+            "type": "promptString",
+            "description": "lox file to run",
         }
     ]
 }
