@@ -85,7 +85,6 @@ impl Chunk {
         }
     }
 
-    // TODO: move to debug.rs
     pub fn disassemble_instruction(&self, offset: usize) -> usize {
         print!("{:04} ", offset);
 

@@ -6,5 +6,5 @@ foo
 
 # stderr:
 Undefined variable 'l1'.
-[line 15] in <script>
+[line 14] in <script>
 

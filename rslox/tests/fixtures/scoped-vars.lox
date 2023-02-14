@@ -11,6 +11,5 @@ var g1 = "foo";
 }
 
 print g1;
-// TODO: is it ok these print nil rather than error?
 print l1;
 print no_such_var;

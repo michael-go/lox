@@ -118,7 +118,6 @@ impl CompilationUnit {
     }
 
     fn resolve_local(&self, name: &str) -> Result<Option<u8>, CompUnitError> {
-        // TODO: can assert that locals.len() < u8::MAX
         for i in (0..self.locals.len()).rev() {
             if self.locals[i].name.lexeme == name {
                 if self.locals[i].depth == -1 {
@@ -189,15 +188,12 @@ struct Compiler {
     current: scanner::Token,
     previous: scanner::Token,
 
-    // TODO: these might need be a pointer
-    //  - in the book it's pointers to the stack, no heap allocation
+    // TODO: in the book there are pointers to the stack, no heap allocation
     comp_unit: CompilationUnit,
     class_compiler: Option<ClassCompiler>,
 }
 
 impl Compiler {
-    // TODO: bah ... don't really want a constructor here, just did it to avoid global var
-    //  another alternative is to have a function with a closure as context
     pub fn new(source: &str, dissasemble: bool) -> Compiler {
         let scanner = scanner::Scanner::new(source);
         static EOF: scanner::Token = scanner::Token {

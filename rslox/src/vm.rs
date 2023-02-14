@@ -267,32 +267,22 @@ impl RunCtx {
 
     fn define_method(&mut self, name: &ObjString) -> Result<()> {
         if let Value::Obj(obj) = self.peek(1) {
-            //TODO: the else brances should be unreachable as we trust the compiler
             if let Ok(class) = obj.clone().downcast_rc::<Class>() {
                 let method = self.peek(0);
                 if let Value::Obj(obj) = method {
                     if let Ok(closure) = obj.clone().downcast_rc::<Closure>() {
                         class.methods.borrow_mut().insert(name.clone(), closure);
                         self.pop();
-                    } else {
-                        return Err(self
-                            .runtime_error("internal error: Expected a function.")
-                            .into());
+                        return Ok(());
                     }
-                } else {
-                    return Err(self
-                        .runtime_error("internal error: Expected a function.")
-                        .into());
                 }
-            } else {
-                return Err(self
-                    .runtime_error("internal error: Expected a class.")
-                    .into());
             }
+            return Err(self
+                .runtime_error("internal error: Expected a class method")
+                .into());
         } else {
             return Err(self.runtime_error("Only classes have methods.").into());
         }
-        Ok(())
     }
 
     fn bind_method(&mut self, class: &Rc<Class>, name: &ObjString) -> Result<()> {
@@ -732,7 +722,6 @@ impl VM {
     }
 
     fn define_native(&mut self, name: &str, function: fn(&[Value]) -> Value) {
-        // TODO: in the book key & value pushed/popped to the stack to protect from GC
         self.globals.insert(
             ObjString::new(name.to_string()),
             Value::Obj(Rc::new(NativeFunction::new(function))),
