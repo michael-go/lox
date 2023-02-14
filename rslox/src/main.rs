@@ -2,6 +2,7 @@
 
 mod chunk;
 mod compiler;
+mod error;
 mod object;
 mod scanner;
 mod value;
@@ -67,9 +68,9 @@ fn main() {
     }
 
     if res.is_err() {
-        match res.unwrap_err().downcast::<vm::LoxError>() {
+        match res.unwrap_err().downcast::<error::LoxError>() {
             Ok(e) => match e.kind {
-                vm::LoxErrorKind::RuntimeError => std::process::exit(70),
+                error::LoxErrorKind::RuntimeError => std::process::exit(70),
             },
             Err(_) => std::process::exit(65),
         }

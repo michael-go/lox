@@ -1,16 +1,15 @@
-use hashbrown::HashMap;
 use std::cell::RefCell;
 use std::collections::LinkedList;
-use std::fmt::Formatter;
 use std::rc::Rc;
 
-use arrayvec::ArrayVec;
-use num_traits::FromPrimitive;
-
 use anyhow::Result;
+use arrayvec::ArrayVec;
+use hashbrown::HashMap;
+use num_traits::FromPrimitive;
 
 use crate::chunk::*;
 use crate::compiler;
+use crate::error::*;
 use crate::object::*;
 use crate::value::*;
 
@@ -32,37 +31,6 @@ struct CallFrame {
     closure: Rc<Closure>,
     ip: usize,
     slots_base: usize,
-}
-
-// TODO: move to common module, add CompilerError
-#[derive(Debug, PartialEq)]
-pub enum LoxErrorKind {
-    RuntimeError,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct LoxError {
-    #[allow(dead_code)]
-    pub kind: LoxErrorKind,
-    #[allow(dead_code)]
-    pub message: String,
-}
-
-impl std::fmt::Display for LoxError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for LoxError {}
-
-impl LoxError {
-    pub fn new(kind: LoxErrorKind, message: &str) -> LoxError {
-        LoxError {
-            kind,
-            message: message.to_string(),
-        }
-    }
 }
 
 const FRAMES_MAX: usize = 64;
