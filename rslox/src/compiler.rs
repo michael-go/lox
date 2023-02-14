@@ -521,7 +521,7 @@ impl Compiler {
         self.emit_return();
 
         let func = self.comp_unit.function.clone();
-        let mut func_name: &str = &func.name;
+        let mut func_name: &str = &func.name.string;
 
         if self.comp_unit.enclosing.is_some() {
             // TODO: this is hacky, temporaryly doing it to avoid defining comp_unit as Option

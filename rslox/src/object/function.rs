@@ -4,7 +4,7 @@ use crate::chunk::Chunk;
 pub struct Function {
     pub arity: usize,
     pub chunk: Chunk,
-    pub name: String, // TODO: this should be an Obj::String?
+    pub name: ObjString,
     pub upvalue_count: usize,
 }
 
@@ -16,7 +16,7 @@ impl Obj for Function {
 
 impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.name.is_empty() {
+        if self.name.string.is_empty() {
             write!(f, "<script>")
         } else {
             write!(f, "<fn {}>", self.name)
@@ -36,7 +36,7 @@ impl Function {
         Function {
             arity: 0,
             chunk: Chunk::new(),
-            name: func_name,
+            name: ObjString::new(func_name),
             upvalue_count: 0,
         }
     }
