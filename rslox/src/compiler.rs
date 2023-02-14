@@ -9,8 +9,8 @@ use crate::value::*;
 use anyhow::Result;
 use num_traits::{FromPrimitive, ToPrimitive};
 
-pub fn compile(source: &str) -> Result<Function> {
-    Compiler::new(source).compile()
+pub fn compile(source: &str, dissasemble: bool) -> Result<Function> {
+    Compiler::new(source, dissasemble).compile()
 }
 
 #[derive(Clone, Copy, FromPrimitive, ToPrimitive)]
@@ -180,6 +180,7 @@ struct ClassCompiler {
 }
 
 struct Compiler {
+    dissasemble: bool,
     ran: bool,
     had_error: bool,
     panic_mode: bool,
@@ -197,7 +198,7 @@ struct Compiler {
 impl Compiler {
     // TODO: bah ... don't really want a constructor here, just did it to avoid global var
     //  another alternative is to have a function with a closure as context
-    pub fn new(source: &str) -> Compiler {
+    pub fn new(source: &str, dissasemble: bool) -> Compiler {
         let scanner = scanner::Scanner::new(source);
         static EOF: scanner::Token = scanner::Token {
             kind: TokenKind::Eof,
@@ -205,6 +206,7 @@ impl Compiler {
             line: 0,
         };
         Compiler {
+            dissasemble: dissasemble,
             ran: false,
             had_error: false,
             panic_mode: false,
@@ -523,10 +525,17 @@ impl Compiler {
         self.emit_return();
 
         let func = self.comp_unit.function.clone();
+        let mut func_name: &str = &func.name;
 
-        // TODO: this is hacky, temporaryly doing it to avoid defining comp_unit as Option
         if self.comp_unit.enclosing.is_some() {
+            // TODO: this is hacky, temporaryly doing it to avoid defining comp_unit as Option
             self.comp_unit = *self.comp_unit.enclosing.take().unwrap();
+        } else {
+            func_name = "<script>";
+        }
+
+        if self.dissasemble {
+            func.chunk.dissasemble(func_name)
         }
 
         return func;

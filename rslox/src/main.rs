@@ -17,7 +17,7 @@ use std::io::{self, Write};
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(short, long)]
-    disassemble: bool, // TODO: forgot to handle this
+    disassemble: bool,
     #[arg(short, long)]
     trace_execution: bool,
 
@@ -56,6 +56,7 @@ fn main() {
 
     let options = vm::Options {
         trace_execution: args.trace_execution,
+        disassemble: args.disassemble,
     };
 
     let res: Result<()>;

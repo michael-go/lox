@@ -16,12 +16,14 @@ use crate::value::*;
 
 pub struct Options {
     pub trace_execution: bool,
+    pub disassemble: bool,
 }
 
 impl Default for Options {
     fn default() -> Options {
         Options {
             trace_execution: false,
+            disassemble: false,
         }
     }
 }
@@ -361,7 +363,10 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<()> {
-        let function = compiler::compile(source)?;
+        let function = compiler::compile(source, self.options.disassemble)?;
+        if self.options.disassemble {
+            return Ok(());
+        }
         if self.options.trace_execution {
             function.chunk.dissasemble("code");
         }
